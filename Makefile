@@ -4,11 +4,11 @@
 
 S3LIB = ../libs3-1.4/build/lib/libs3.a
 
-all: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-app.c 
-	gcc -g -Wall -O3 -lpthread -lcrypto -o pdp pdp-app.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o
+all: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-test.c 
+	gcc -g -Wall -O3 -o pdp pdp-test.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o -L/usr/local/openssl -lssl -lpthread -lcrypto -ldl
 
 measurements: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-measurements.c 
-	gcc -pg -g -Wall -O3 -lpthread -lcrypto -o pdp-m pdp-measurements.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o
+	gcc -pg -g -Wall -O3 -o pdp-m pdp-measurements.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o -L/usr/local/openssl -lssl -lpthread -lcrypto -ldl
 
 pdp-s3: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-s3.o pdp-app.c $(S3LIB)
 	gcc -pg -DUSE_S3 -g -Wall -O3 -lpthread -lcurl -lxml2 -lz -lcrypto -o pdp-s3 pdp-app.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o pdp-s3.o $(S3LIB)

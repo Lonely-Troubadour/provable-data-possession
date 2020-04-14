@@ -35,6 +35,8 @@
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
+#include <openssl/bn.h>
+#include <openssl/rsa.h>
 #include <pwd.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -431,7 +433,7 @@ PDP_key *read_pdp_keypair(FILE *pri_key, FILE *pub_key){
 #ifndef	DEBUG_MODE
 	if(!read_password("Enter passphrase:", (unsigned char *)password, password_len)) goto cleanup;
 #else
-	strcpy(password, "z");
+	strcpy(password, "123456");
 #endif
 
 	pkey = PEM_read_PrivateKey(pri_key, NULL, NULL, password);

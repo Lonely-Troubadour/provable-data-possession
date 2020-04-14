@@ -42,7 +42,7 @@ static struct option longopts[] = {
 	{"gen-key", no_argument, NULL, 'g'}, //TODO optional argument for key location
 	{"tag", no_argument, NULL, 't'},
 	{"verify", no_argument, NULL, 'v'},
-	{"blocksize", no_argument, NULL 'b'},
+	{"blocksize", no_argument, NULL, 'b'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv){
 
 
 
-				tag = pdp_tag_block(PDP_key *key, unsigned char *block, pdp_blocksize, unsigned int index);
+				tag = pdp_tag_block( key, NULL, pdp_blocksize, 0);
 					
 
 				if(pdp_tag_file(optarg, strlen(optarg), NULL, 0))

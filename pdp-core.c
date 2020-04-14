@@ -64,7 +64,9 @@ PDP_tag *pdp_tag_block(PDP_key *key, unsigned char *block, size_t blocksize, uns
 	tag->index = index;
 	
 	/* Perform the pseudo-random function (prf) Wi = w_v(i) */
+	// printf("%ld ", tag->index_prf_size);
 	tag->index_prf = generate_prf_w(key, tag->index, &(tag->index_prf_size));
+	// printf("%ld\n", tag->index_prf_size);
 	if(!tag->index_prf) goto cleanup;
 	
 	/* Peform the full-domain hash function h(Wi) */
@@ -343,7 +345,6 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	/* Compute the indices i_j = pi_k1(j); the indices of blocks to sample */
 	indices = generate_prp_pi(challenge);
 	for(j = 0; j < challenge->c; j++){
-
 		/* Perform the pseudo-random function Wi = w_v(i) */
 		index_prf = generate_prf_w(key, indices[j], &index_prf_size);
 		if(!index_prf) goto cleanup;
@@ -398,6 +399,7 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	/* The final verification step.  Does rho == rho? */
 	if(memcmp(H_result, proof->rho, proof->rho_size) == 0)
 		result = 1;
+	else printf("Final verification failed!\n");
 
 	if(tao) BN_clear_free(tao);
 	if(denom) BN_clear_free(denom);
@@ -423,7 +425,7 @@ cleanup:
 	if(prf_result && (prf_result_size > 0)) sfree(prf_result, prf_result_size);
 	if(H_result && (H_result_size > 0)) sfree(H_result, H_result_size);
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
-	
+
 	return 0;
 }
 

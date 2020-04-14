@@ -1,4 +1,4 @@
-/* 
+/*
 * pdp-file.c
 *
 * Copyright (c) 2008, Zachary N J Peterson <zachary@jhu.edu>
@@ -50,7 +50,7 @@ static int write_pdp_tag(FILE *tagfile, PDP_tag *tag){
 
 	unsigned char *tim = NULL;
 	size_t tim_size = 0;
-	
+
 	if(!tagfile || !tag || !tag->Tim) return 0;
 
 	/* Write Tim to disk */
@@ -66,7 +66,7 @@ static int write_pdp_tag(FILE *tagfile, PDP_tag *tag){
 	/* write index */
 	fwrite(&(tag->index), sizeof(unsigned int), 1, tagfile);
 	if(ferror(tagfile)) goto cleanup;
-	
+
 	/* write index prf */
 	fwrite(&(tag->index_prf_size), sizeof(size_t), 1, tagfile);
 	if(ferror(tagfile)) goto cleanup;
@@ -75,7 +75,7 @@ static int write_pdp_tag(FILE *tagfile, PDP_tag *tag){
 
 	if(tim) sfree(tim, tim_size);
 	return 1;
-	
+
 cleanup:
 	if(tim) sfree(tim, tim_size);
 	return 0;
@@ -83,24 +83,24 @@ cleanup:
 
 /* read_pdp_tag: Reads a PDP tag from disk.  Takes an open file structure and the index of a PDP tag
 *  and reads from disk, returning a PDP tag structure or NULL on failure.  The tagfile must be open for
-*  reading. 
+*  reading.
 */
 PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
-	
+
 	PDP_tag *tag = NULL;
 	unsigned char *tim = NULL;
 	size_t tim_size = 0;
 	size_t index_prf_size = 0;
 	int i = 0;
-	
+
 	if(!tagfile) return NULL;
-	
+
 	/* Allocate memory */
 	if( ((tag = generate_pdp_tag()) == NULL)) goto cleanup;
-	
+
 	/* Seek to start of tag file */
 	if(fseek(tagfile, 0, SEEK_SET) < 0) goto cleanup;
-	
+
 	/* Seek to tag offset index */
 	for(i = 0; i < index; i++){
 		fread(&tim_size, sizeof(size_t), 1, tagfile);
@@ -109,7 +109,7 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 		fread(&(index_prf_size), sizeof(size_t), 1, tagfile);
 		if(fseek(tagfile, (index_prf_size), SEEK_CUR) < 0) goto cleanup;
 	}
-	
+
 	/*Read in Tim */
 	fread(&tim_size, sizeof(size_t), 1, tagfile);
 	if(ferror(tagfile)) goto cleanup;
@@ -123,7 +123,7 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 	/* read index */
 	fread(&(tag->index), sizeof(unsigned int), 1, tagfile);
 	if(ferror(tagfile)) goto cleanup;
-	
+
 	/* write index prf */
 	fread(&(tag->index_prf_size), sizeof(size_t), 1, tagfile);
 	if(ferror(tagfile)) goto cleanup;
@@ -133,14 +133,380 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 	if(ferror(tagfile)) goto cleanup;
 
 	if(tim) sfree(tim, tim_size);
-	
+
 	return tag;
-	
+
 cleanup:
 	if(tag->index_prf) sfree(tag->index_prf, tag->index_prf_size);
 	if(tag) destroy_pdp_tag(tag);
 	if(tim) sfree(tim, tim_size);
 
+	return NULL;
+}
+
+/**
+ * write_pdp_challenge: Writes the challenge to disk
+ */
+int write_pdp_challenge(FILE *chalfile, PDP_challenge *chal) {
+	unsigned char *g_s = NULL;
+	unsigned char *s = NULL;
+	size_t g_s_size = 0;
+	size_t s_size = 0;
+	size_t k1_size = 0;
+	size_t k2_size = 0;
+
+	if (!chalfile || !chal || !chal->g_s || !chal->s) return 0;
+
+	/* Write c, number of blocks to file */
+	fwrite(&(chal->c), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write numfileblocks, number of total blocks to file */
+	fwrite(&(chal->numfileblocks), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write g_s, random secret base to file */
+	g_s_size = BN_num_bytes(chal->g_s);
+	fwrite(&g_s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (g_s = malloc(g_s_size)) == NULL) goto cleanup;
+	memset(g_s, 0, g_s_size);
+	if(!BN_bn2bin(chal->g_s, g_s)) goto cleanup;
+	fwrite(g_s, g_s_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write s, random secret to file */
+	s_size = BN_num_bytes(chal->s);
+	fwrite(&s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (s = malloc(s_size)) == NULL) goto cleanup;
+	memset(s, 0, s_size);
+	if(!BN_bn2bin(chal->s, s)) goto cleanup;
+	fwrite(s, s_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write k1, PRP key to file */
+	k1_size = PRP_KEY_SIZE;
+	fwrite(&(k1_size), sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	fwrite(chal->k1, k1_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write k2, PRF key to file */
+	k2_size = PRP_KEY_SIZE;
+	fwrite(&(k2_size), sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	fwrite(chal->k2, k2_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	if(g_s) sfree(g_s, g_s_size);
+	if(s) sfree(s, s_size);
+	return 1;
+
+cleanup:
+	if (g_s) sfree(g_s, g_s_size);
+	if (s) sfree(s, s_size);
+	return 0;
+}
+
+/**
+ * write_pdp_server_challenge: Writes the server_challenge to disk
+ */
+int write_pdp_server_challenge(FILE *chalfile, PDP_challenge *chal) {
+	unsigned char *g_s = NULL;
+	size_t g_s_size = 0;
+	size_t k1_size = 0;
+	size_t k2_size = 0;
+
+	if (!chalfile || !chal || !chal->g_s || !chal->s) return 0;
+
+	/* Write c, number of blocks to file */
+	fwrite(&(chal->c), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write numfileblocks, number of total blocks to file */
+	fwrite(&(chal->numfileblocks), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write g_s, random secret base to file */
+	g_s_size = BN_num_bytes(chal->g_s);
+	fwrite(&g_s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (g_s = malloc(g_s_size)) == NULL) goto cleanup;
+	memset(g_s, 0, g_s_size);
+	if(!BN_bn2bin(chal->g_s, g_s)) goto cleanup;
+	fwrite(g_s, g_s_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write k1, PRP key to file */
+	k1_size = PRP_KEY_SIZE;
+	fwrite(&(k1_size), sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	fwrite(chal->k1, k1_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Write k2, PRF key to file */
+	k2_size = PRF_KEY_SIZE;
+	fwrite(&(k2_size), sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	fwrite(chal->k2, k2_size, 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	if(g_s) sfree(g_s, g_s_size);
+	return 1;
+
+cleanup:
+	if (g_s) sfree(g_s, g_s_size);
+	return 0;
+}
+
+/**
+ * read_pdp_challenge: Reads the challenge from disk
+ */
+PDP_challenge *read_pdp_challenge(FILE *chalfile) {
+	PDP_challenge *chal = NULL;
+	unsigned char *g_s = NULL;
+	unsigned char *s = NULL;
+	size_t g_s_size = 0;
+	size_t s_size = 0;
+	size_t k1_size = 0;
+	size_t k2_size = 0;
+
+	if(!chalfile) return NULL;
+
+	if((chal = generate_pdp_challenge()) == NULL) goto cleanup;
+
+	/* Seek to beginning of the file */
+	if(fseek(chalfile, 0, SEEK_SET) < 0) goto cleanup;
+
+	/* Read in c */
+	fread(&(chal->c), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Read in numfileblocks */
+	fread(&(chal->numfileblocks), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Read in g_s */
+	fread(&g_s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (g_s = malloc((unsigned int)g_s_size)) == NULL) goto cleanup;
+	memset(g_s, 0, (unsigned int)g_s_size);
+    fread(g_s, (unsigned int)g_s_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+    if(!BN_bin2bn(g_s, g_s_size, chal->g_s)) goto cleanup;
+
+	/* Read in s */
+	fread(&s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (s = malloc((unsigned int)s_size)) == NULL) goto cleanup;
+	memset(s, 0, (unsigned int)s_size);
+    fread(s, (unsigned int)s_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+    if(!BN_bin2bn(s, s_size, chal->s)) goto cleanup;
+
+	/* Read in k1*/
+	fread(&k1_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if ((chal->k1 = malloc((unsigned int)k1_size)) == NULL) goto cleanup;
+    memset(chal->k1, 0, (unsigned int)k1_size);
+    fread(chal->k1, (unsigned int)k1_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+	/* Read in k2*/
+	fread(&k2_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if ((chal->k2 = malloc((unsigned int)k2_size)) == NULL) goto cleanup;
+    memset(chal->k2, 0, (unsigned int)k2_size);
+    fread(chal->k2, (unsigned int)k2_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+	if(g_s) sfree(g_s, g_s_size);
+	if(s) sfree(s, s_size);
+
+	return chal;
+
+cleanup:
+	if(chal->k1) sfree(chal->k1, k1_size);
+	if(chal->k2) sfree(chal->k2, k2_size);
+	if(chal->g_s) sfree(chal->g_s, g_s_size);
+	if(chal->s) sfree(chal->s, s_size);
+	if(chal) destroy_pdp_challenge(chal);
+	return NULL;
+}
+
+/**
+ * read_pdp_server_challenge: Reads the server_challenge from disk
+ */
+PDP_challenge *read_pdp_server_challenge(FILE *chalfile) {
+	PDP_challenge *chal = NULL;
+	unsigned char *g_s = NULL;
+	size_t g_s_size = 0;
+	size_t k1_size = 0;
+	size_t k2_size = 0;
+
+	if(!chalfile) return NULL;
+
+	if((chal = generate_pdp_challenge()) == NULL) goto cleanup;
+
+	/* Seek to beginning of the file */
+	if(fseek(chalfile, 0, SEEK_SET) < 0) goto cleanup;
+
+	/* Read in c */
+	fread(&(chal->c), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Read in numfileblocks */
+	fread(&(chal->numfileblocks), sizeof(unsigned int), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+
+	/* Read in g_s */
+	fread(&g_s_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if( (g_s = malloc((unsigned int)g_s_size)) == NULL) goto cleanup;
+	memset(g_s, 0, (unsigned int)g_s_size);
+    fread(g_s, (unsigned int)g_s_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+    if(!BN_bin2bn(g_s, g_s_size, chal->g_s)) goto cleanup;
+
+	/* Read in k1*/
+	fread(&k1_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if ((chal->k1 = malloc((unsigned int)k1_size)) == NULL) goto cleanup;
+    memset(chal->k1, 0, (unsigned int)k1_size);
+    fread(chal->k1, (unsigned int)k1_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+	/* Read in k2*/
+	fread(&k2_size, sizeof(size_t), 1, chalfile);
+	if(ferror(chalfile)) goto cleanup;
+	if ((chal->k2 = malloc((unsigned int)k2_size)) == NULL) goto cleanup;
+    memset(chal->k2, 0, (unsigned int)k2_size);
+    fread(chal->k2, (unsigned int)k2_size, 1, chalfile);
+    if(ferror(chalfile)) goto cleanup;
+
+	if(g_s) sfree(g_s, g_s_size);
+
+	return chal;
+
+cleanup:
+	if(chal->k1) sfree(chal->k1, k1_size);
+	if(chal->k2) sfree(chal->k2, k2_size);
+	if(chal->g_s) sfree(chal->g_s, g_s_size);
+	if(chal) destroy_pdp_challenge(chal);
+	return NULL;
+}
+
+
+/**
+ * write_pdp_proof: Writes the proof to disk
+ */
+int write_pdp_proof(FILE *prooffile, PDP_proof *proof) {
+	unsigned char *T = NULL;
+	unsigned char *rho_temp = NULL;
+	size_t T_size = 0;
+	size_t rho_temp_size = 0;
+
+	if (!prooffile || !proof || !proof->T || !proof->rho_temp) return 0;
+
+
+	/* Write T, product of tags to file */
+	T_size = BN_num_bytes(proof->T);
+	fwrite(&T_size, sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if( (T = malloc(T_size)) == NULL) goto cleanup;
+	memset(T, 0, T_size);
+	if(!BN_bn2bin(proof->T, T)) goto cleanup;
+	fwrite(T, T_size, 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+
+	/* Write rho_temp, a running tally of rho to file */
+	rho_temp_size = BN_num_bytes(proof->rho_temp);
+	fwrite(&rho_temp_size, sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if( (rho_temp = malloc(rho_temp_size)) == NULL) goto cleanup;
+	memset(rho_temp, 0, rho_temp_size);
+	if(!BN_bn2bin(proof->rho_temp, rho_temp)) goto cleanup;
+	fwrite(rho_temp, rho_temp_size, 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+
+	/* Write rho, PRP key to file */
+	fwrite(&(proof->rho_size), sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	fwrite(proof->rho, proof->rho_size, 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+
+
+	if(T) sfree(T, T_size);
+	if(rho_temp) sfree(rho_temp, rho_temp_size);
+	return 1;
+
+cleanup:
+	if (T) sfree(T, T_size);
+	if (rho_temp) sfree(rho_temp, rho_temp_size);
+	return 0;
+}
+
+
+/**
+ * read_pdp_proof: Reads the proof from disk
+ */
+PDP_proof *read_pdp_proof(FILE *prooffile) {
+	PDP_proof *proof = NULL;
+	unsigned char *T = NULL;
+	unsigned char *rho_temp = NULL;
+	size_t T_size = 0;
+	size_t rho_temp_size = 0;
+	
+
+	if(!prooffile) return NULL;
+
+	if((proof = generate_pdp_proof()) == NULL) goto cleanup;
+
+	/* Seek to beginning of the file */
+	if(fseek(prooffile, 0, SEEK_SET) < 0) goto cleanup;
+
+	/* Read in T */
+	fread(&T_size, sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if( (T = malloc((unsigned int)T_size)) == NULL) goto cleanup;
+	memset(T, 0, (unsigned int)T_size);
+    fread(T, (unsigned int)T_size, 1, prooffile);
+    if(ferror(prooffile)) goto cleanup;
+
+    if(!BN_bin2bn(T, T_size, proof->T)) goto cleanup;
+
+	/* Read in rho_temp */
+	fread(&rho_temp_size, sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if( (rho_temp = malloc((unsigned int)rho_temp_size)) == NULL) goto cleanup;
+	memset(rho_temp, 0, (unsigned int)rho_temp_size);
+    fread(rho_temp, (unsigned int)rho_temp_size, 1, prooffile);
+    if(ferror(prooffile)) goto cleanup;
+
+    if(!BN_bin2bn(rho_temp, rho_temp_size, proof->rho_temp)) goto cleanup;
+
+	/* Read in rho*/
+	fread(&(proof->rho_size), sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if ((proof->rho = malloc((unsigned int)proof->rho_size)) == NULL) goto cleanup;
+    memset(proof->rho, 0, (unsigned int)proof->rho_size);
+    fread(proof->rho, (unsigned int)proof->rho_size, 1, prooffile);
+    if(ferror(prooffile)) goto cleanup;
+
+	if(T) sfree(T, T_size);
+	if(rho_temp) sfree(rho_temp, rho_temp_size);
+
+	return proof;
+
+cleanup:
+	if(proof->rho) sfree(proof->rho, proof->rho_size);
+	if(proof->T) sfree(proof->T, T_size);
+	if(proof->rho_temp) sfree(proof->rho_temp, rho_temp_size);
+	if(proof) destroy_pdp_proof(proof);
 	return NULL;
 }
 
@@ -163,14 +529,14 @@ void *pdp_tag_thread(void *threadargs_ptr){
 	unsigned char buf[PDP_BLOCKSIZE];
 	struct thread_arguments *threadargs = threadargs_ptr;
 	int i = 0;
-	
+
 	if(!threadargs || !threadargs->file || !threadargs->tags || !threadargs->key || !threadargs->numblocks) goto cleanup;
-	
+
 	/* Allocate memory for return value - this should be freed by the checker */
 	ret = malloc(sizeof(int));
 	if(!ret) goto cleanup;
 	*ret = 0;
-	
+
 	/* For N threads, read in and tag each Nth block */
 	block = threadargs->threadid;
 	for(i = 0; i < threadargs->numblocks; i++){
@@ -190,10 +556,10 @@ void *pdp_tag_thread(void *threadargs_ptr){
 
 cleanup:
 	pthread_exit(ret);
-	
+
 }
 
-#endif 
+#endif
 
 /* pdp_tag_file: PDP tags the given file.  Takes in a path to a file, opens it, and performs a PDP
 *  tagging of the data.  The output is written to a a file specified by tagfilepath or to the filepath
@@ -224,18 +590,18 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 #endif
 
 	memset(realtagfilepath, 0, MAXPATHLEN);
-	
+
 	if(!filepath) return 0;
 	if(filepath_len >= MAXPATHLEN) return 0;
 	if(tagfilepath_len >= MAXPATHLEN) return 0;
-	
+
 	/* If no tag file path is specified, add a .tag extension to the filepath */
 	if(!tagfilepath && (filepath_len < MAXPATHLEN - 5)){
 		if( snprintf(realtagfilepath, MAXPATHLEN, "%s.tag", filepath) >= MAXPATHLEN ) goto cleanup;
 	}else{
 		memcpy(realtagfilepath, tagfilepath, tagfilepath_len);
 	}
-	
+
 	/* Check to see if the tag file exists */
 	if( access(realtagfilepath, F_OK) == 0){
 #ifdef DEBUG_MODE
@@ -246,19 +612,19 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 #endif
 		if(yesorno != 'y') goto exit;
 	}
-	
+
 	tagfile = fopen(realtagfilepath, "w");
 	if(!tagfile){
 		fprintf(stderr, "ERROR: Was not able to create %s.\n", realtagfilepath);
 		goto cleanup;
 	}
-	
+
 	/* Get the PDP key */
 	key = pdp_get_keypair();
 	if(!key) goto cleanup;
 
 	/* For each block of the file, tag it and write the tag to disk */
-	
+
 #ifdef THREADING
 	/* Calculate the number pdp blocks in the file */
 	if(stat(filepath, &st) < 0) return 0;
@@ -277,7 +643,7 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 		threadargs[index].threadid = index;
 		threadargs[index].numblocks = numfileblocks/NUM_THREADS;
 		threadargs[index].tags = tags;
-		
+
 		/* If there is not an equal number of blocks to tag, add the extra blocks to
 		 * the corresponding threads */
 		if(index < numfileblocks%NUM_THREADS)
@@ -297,7 +663,7 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 				fclose(threadargs[index].file);
 		}
 	}
-	
+
 	/* Write the tags out */
 	for(index = 0; index < numfileblocks; index++){
 		if(!tags[index]) goto cleanup;
@@ -323,14 +689,14 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 		index++;
 		destroy_pdp_tag(tag);
 		tag = NULL;
-	}while(!feof(file));	
+	}while(!feof(file));
 #endif
 
 exit:
 	destroy_pdp_key(key);
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
-	
+
 	return 1;
 
 cleanup:
@@ -352,7 +718,7 @@ cleanup:
 
 	destroy_pdp_key(key);
 	if(file) fclose(file);
-	if(tagfile){ 
+	if(tagfile){
 		ftruncate(fileno(tagfile), 0);
 		unlink(realtagfilepath);
 		fclose(tagfile);
@@ -362,7 +728,7 @@ cleanup:
 
 /* pdp_challenge_file: Creates a challenge for a file that is numfileblocks long.  Takes in a numfileblocks, the number of blocks
  * the file to be challenged.  Returns an allocated challenge structure or NULL on error.
- * 
+ *
 */
 PDP_challenge *pdp_challenge_file(unsigned int numfileblocks){
 
@@ -378,15 +744,15 @@ PDP_challenge *pdp_challenge_file(unsigned int numfileblocks){
 	/* Create a challenge */
 	challenge = pdp_challenge(key, numfileblocks);
 	if(!challenge) goto cleanup;
-	
+
 	if(key) destroy_pdp_key(key);
-	
+
 	return challenge;
-	
+
 cleanup:
 	if(challenge) destroy_pdp_challenge(challenge);
 	if(key) destroy_pdp_key(key);
-	
+
 	return NULL;
 }
 
@@ -406,31 +772,31 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 	int j = 0;
 
 	memset(realtagfilepath, 0, MAXPATHLEN);
-	
+
 	if(!filepath || !challenge || !key) return NULL;
 	if(filepath_len >= MAXPATHLEN) return NULL;
 	if(tagfilepath_len >= MAXPATHLEN) return NULL;
-	
+
 	file = fopen(filepath, "r");
 	if(!file){
 		fprintf(stderr, "ERROR: Was unable to open %s\n", filepath);
 		return NULL;
 	}
-	
+
 	/* If no tag file path is specified, add a .tag extension to the filepath */
 	if(!tagfilepath && (filepath_len < MAXPATHLEN - 5)){
 		if( snprintf(realtagfilepath, MAXPATHLEN, "%s.tag", filepath) >= MAXPATHLEN) goto cleanup;
 	}else{
 		memcpy(realtagfilepath, tagfilepath, tagfilepath_len);
 	}
-	
+
 	tagfile = fopen(realtagfilepath, "r");
 	if(!tagfile) goto cleanup;
-	
+
 	/* Compute the indices i_j = pi_k1(j); the block indices to sample */
 	indices = generate_prp_pi(challenge);
 	if(!indices) goto cleanup;
-	
+
 	for(j = 0; j < challenge->c; j++){
 		memset(buf, 0, PDP_BLOCKSIZE);
 
@@ -440,25 +806,25 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 		/* Read data block */
 		fread(buf, PDP_BLOCKSIZE, 1, file);
 		if(ferror(file)) goto cleanup;
-		
+
 		/* Read tag for data block at indices[j] */
 		tag = read_pdp_tag(tagfile, indices[j]);
 		if(!tag) goto cleanup;
-		
+
 		proof = pdp_generate_proof_update(key, challenge, tag, proof, buf, PDP_BLOCKSIZE, j);
 		if(!proof) goto cleanup;
-		
+
 		destroy_pdp_tag(tag);
 		tag = NULL;
 	}
 
 	proof = pdp_generate_proof_final(key, challenge, proof);
 	if(!proof) goto cleanup;
-	
+
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
-	
+
 	return proof;
 
 cleanup:
@@ -474,13 +840,13 @@ int pdp_verify_file(PDP_challenge *challenge, PDP_proof *proof){
 
 	PDP_key *key = NULL;
 	int result = 0;
-	
+
 	if(!challenge || !proof) return 0;
-	
+
 	/* Get the PDP key */
 	key = pdp_get_keypair();
 	if(!key) return 0;
-	
+
 	result = pdp_verify_proof(key, challenge, proof);
 
 	if(key) destroy_pdp_key(key);
@@ -503,38 +869,38 @@ int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tag
 	struct stat st;
 	unsigned int numfileblocks = 0;
 	int j = 0;
-	int result = 0;		
+	int result = 0;
 	unsigned int *indices = NULL;
 	char realtagfilepath[MAXPATHLEN];
 	unsigned char buf[PDP_BLOCKSIZE];
 
 	memset(realtagfilepath, 0, MAXPATHLEN);
-	
+
 	if(!filepath) return 0;
 	if(filepath_len >= MAXPATHLEN) return 0;
 	if(tagfilepath_len >= MAXPATHLEN) return 0;
-	
+
 	file = fopen(filepath, "r");
 	if(!file){
 		fprintf(stderr, "ERROR: Was unable to open %s\n", filepath);
 		return 0;
 	}
-	
+
 	/* If no tag file path is specified, add a .tag extension to the filepath */
 	if(!tagfilepath && (filepath_len < MAXPATHLEN - 5)){
 		if( snprintf(realtagfilepath, MAXPATHLEN, "%s.tag", filepath) >= MAXPATHLEN) goto cleanup;
 	}else{
 		memcpy(realtagfilepath, tagfilepath, tagfilepath_len);
 	}
-	
+
 	tagfile = fopen(realtagfilepath, "r");
 	if(!tagfile){
 		fprintf(stderr, "ERROR: Was unable to open %s\n", realtagfilepath);
 		goto cleanup;
 	}
-	
+
 	if(stat(filepath, &st) < 0) goto cleanup;
-	
+
 	/* Calculate the number pdp blocks in the file */
 	numfileblocks = (st.st_size/PDP_BLOCKSIZE);
 	if(st.st_size%PDP_BLOCKSIZE)
@@ -551,7 +917,7 @@ int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tag
 	/* Compute the indices i_j = pi_k1(j); the block indices to sample */
 	indices = generate_prp_pi(challenge);
 	if(!indices) goto cleanup;
-	
+
 	for(j = 0; j < challenge->c; j++){
 		memset(buf, 0, PDP_BLOCKSIZE);
 
@@ -561,14 +927,14 @@ int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tag
 		/* Read data block */
 		fread(buf, PDP_BLOCKSIZE, 1, file);
 		if(ferror(file)) goto cleanup;
-		
+
 		/* Read tag for data block at indices[j] */
 		tag = read_pdp_tag(tagfile, indices[j]);
 		if(!tag) goto cleanup;
-		
+
 		proof = pdp_generate_proof_update(key, challenge, tag, proof, buf, PDP_BLOCKSIZE, j);
 		if(!proof) goto cleanup;
-		
+
 		destroy_pdp_tag(tag);
 	}
 
@@ -583,9 +949,9 @@ int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tag
 	if(key) destroy_pdp_key(key);
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
-	
+
 	return result;
-	
+
 cleanup:
 	fprintf(stderr, "ERROR: There was an error verifying.\n");
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
@@ -595,6 +961,6 @@ cleanup:
 	if(tag) destroy_pdp_tag(tag);
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
-		
+
 	return 0;
 }

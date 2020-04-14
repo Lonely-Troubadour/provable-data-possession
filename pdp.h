@@ -84,7 +84,7 @@ struct PDP_parameters_struct{
 	
 	unsigned int block_size;
 	unsigned int num_challenge;
-}
+};
 
 extern PDP_params params;
 
@@ -199,6 +199,15 @@ void destroy_pdp_challenge(PDP_challenge *challenge);
 
 PDP_proof *generate_pdp_proof();
 void destroy_pdp_proof(PDP_proof *proof);
+
+/* My changes */
+int write_pdp_challenge(FILE *chalfile, PDP_challenge *chal);
+PDP_challenge *read_pdp_challenge(FILE *chalfile);
+int write_pdp_proof(FILE *prooffile, PDP_proof *proof);
+PDP_proof *read_pdp_proof(FILE *prooffile);
+int write_pdp_server_challenge(FILE *chalfile, PDP_challenge *chal);
+PDP_challenge *read_pdp_server_challenge(FILE *chalfile);
+void printhex(unsigned char *ptr, size_t size);
 
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3
