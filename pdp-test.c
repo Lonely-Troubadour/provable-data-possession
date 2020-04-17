@@ -53,6 +53,8 @@ int main(int argc, char **argv){
 
 	FILE *prooffile = NULL;
 	FILE *chalfile = NULL;
+	char chalpath[MAXPATHLEN];
+	char proofpath[MAXPATHLEN];
 
     gettimeofday(&t0, 0);
 
@@ -86,7 +88,7 @@ int main(int argc, char **argv){
 					fprintf(stderr, "ERROR: File name is too long.\n");
 					break;
 				}
-				fprintf(stdout, "Verifying %s...\n", optarg);
+				fprintf(stdout, "Generating challenge and proof %s...\n", optarg);
 
 				/* Calculate the number pdp blocks in the file */
 				stat(optarg, &st);
@@ -112,21 +114,31 @@ int main(int argc, char **argv){
                 printf("GenProof: %f ms\n", elapsed);
 
 				/* Write proof file to disk and read in */
-				prooffile = fopen("/home/vincent/Desktop/blockchain/voting/proof", "w");
-				if(!write_pdp_proof(prooffile, proof)) fprintf(stderr, "Write proof failed!");
+				snprintf(chalpath, MAXPATHLEN, "%s.chal", optarg);
+				snprintf(proofpath, MAXPATHLEN, "%s.proof", optarg);
+				// fprintf(stdout, "%s\n", chalpath);
+				// fprintf(stdout, "%s\n", proofpath);
+
+				prooffile = fopen(proofpath, "w");
+				if(!write_pdp_proof(prooffile, proof)) fprintf(stderr, "Write proof failed!\n");
 				fclose(prooffile);
 				destroy_pdp_proof(proof);
 
 				/* Write challenge to disk */
-				chalfile = fopen("/home/vincent/Desktop/blockchain/voting/challenge", "w");
-				if(!write_pdp_challenge(chalfile, challenge)) fprintf(stderr, "Write challenge fialed!");
+				chalfile = fopen(chalpath, "w");
+				if(!write_pdp_challenge(chalfile, challenge)) fprintf(stderr, "Write challenge fialed!\n");
 				fclose(chalfile);
 				destroy_pdp_challenge(challenge);
 				break;
 
 			case 'v':
+				snprintf(chalpath, MAXPATHLEN, "%s.chal", optarg);
+				snprintf(proofpath, MAXPATHLEN, "%s.proof", optarg);
+				// fprintf(stdout, "%s\n", chalpath);
+				// fprintf(stdout, "%s\n", proofpath);
+
 				/* Read in challenge */
-				chalfile = fopen("/home/vincent/Desktop/blockchain/voting/challenge", "r");
+				chalfile = fopen(chalpath, "r");
 				challenge = read_pdp_challenge(chalfile);
 				fclose(chalfile);
 				
@@ -165,10 +177,10 @@ int main(int argc, char **argv){
 				
 
 				/* Read in proof */
-				prooffile = fopen("/home/vincent/Desktop/blockchain/voting/proof", "r");
+				prooffile = fopen(proofpath, "r");
 				proof = read_pdp_proof(prooffile);
 				fclose(prooffile);
-
+				if(!challenge) fprintf(stderr, "No challenge\n");
 			   	if(!proof) fprintf(stderr, "No proof\n");
                 gettimeofday(&t0, 0);
 				if(pdp_verify_file(challenge, proof))

@@ -100,14 +100,14 @@ unsigned int *generate_prp_pi(PDP_challenge *challenge){
 	AES_set_encrypt_key(challenge->k1, PRP_KEY_SIZE * 8, &aes_key);
 	// printhex(challenge->k1, PRP_KEY_SIZE);
 
-	FILE *ind = NULL;
-	if( access("/home/vincent/Desktop/ind.txt", F_OK ) != -1 ) {
-    	// file exists
-		ind = fopen("/home/vincent/Desktop/newInd.txt", "w");
-	} else {
-    	// file doesn't exist
-		ind = fopen("/home/vincent/Desktop/ind.txt", "w");
-	}
+	// FILE *ind = NULL;
+	// if( access("/home/vincent/Desktop/ind.txt", F_OK ) != -1 ) {
+    // 	// file exists
+	// 	ind = fopen("/home/vincent/Desktop/newInd.txt", "w");
+	// } else {
+    // 	// file doesn't exist
+	// 	ind = fopen("/home/vincent/Desktop/ind.txt", "w");
+	// }
 	
 
 	/* Choose c blocks from 0 to numfileblocks - 1 without replacement */
@@ -131,7 +131,7 @@ unsigned int *generate_prp_pi(PDP_challenge *challenge){
 	
 		if( (challenge->numfileblocks - x) * r < challenge->c - j){
 			indices[j] = x;
-			fprintf(ind, "%d %d\n", j, indices[j]);
+			// fprintf(ind, "%d %d\n", j, indices[j]);
 			// if (x < 50)
 				// printf("%d %d\n", x, j);
 			j++;
