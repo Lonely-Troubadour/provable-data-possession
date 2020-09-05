@@ -467,3 +467,25 @@ cleanup:
 	return NULL;
 }
 
+
+int get_file_size(const char* file) {
+    struct stat tbuf;
+    stat(file, &tbuf);
+    return tbuf.st_size;
+}
+
+void destroy_tree_node(tree_node* node) {
+	if (!node) return;
+	if(node->hash) sfree(node->hash, SHA_DIGEST_LENGTH);
+	sfree(node, sizeof(tree_node));
+}
+
+tree_node *generate_tree_node() {
+	tree_node* node = NULL;
+
+	if ((node = malloc(sizeof(tree_node))) == NULL) return NULL;
+	memset(node, 0, sizeof(tree_node));
+	return node;
+}
+
+

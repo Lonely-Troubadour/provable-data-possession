@@ -81,8 +81,15 @@ int main(int argc, char **argv){
                     gettimeofday(&t1, 0);
                     elapsed = timedifference_msec(t0, t1);
                     printf("Tag time: %f ms\n" ,elapsed);
+					
+					gettimeofday(&t0, 0);
+					generate_tree(optarg, strlen(optarg), NULL, 0);
+					gettimeofday(&t1, 0);
+					elapsed = timedifference_msec(t0, t1);
+					printf("Gen tree time: %f", elapsed);
                     break;
                 }
+				
 			case 'c':
 				if(strlen(optarg) >= MAXPATHLEN){
 					fprintf(stderr, "ERROR: File name is too long.\n");

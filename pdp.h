@@ -36,7 +36,7 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <string.h>
-
+#include <sys/stat.h>
 
 #define DEBUG_MODE
 
@@ -69,7 +69,7 @@
 #define RSA_E RSA_F4
 
 #define PDP_BLOCKSIZE 4096 /* 4Kbytes */
-
+#define TREE_BLOCKSIZE 524288
 /* 460 blocks gives you 99% chance of detecting an error, 300 blocks gives you 95% chance*/
 #define MAGIC_NUM_CHALLENGE_BLOCKS 460
 
@@ -201,6 +201,12 @@ PDP_proof *generate_pdp_proof();
 void destroy_pdp_proof(PDP_proof *proof);
 
 /* My changes */
+struct tree_node_struct {
+	unsigned char* hash;
+	unsigned char* data;
+};
+typedef struct tree_node_struct tree_node;
+
 int write_pdp_challenge(FILE *chalfile, PDP_challenge *chal);
 PDP_challenge *read_pdp_challenge(FILE *chalfile);
 int write_pdp_proof(FILE *prooffile, PDP_proof *proof);
@@ -209,6 +215,10 @@ int write_pdp_server_challenge(FILE *chalfile, PDP_challenge *chal);
 PDP_challenge *read_pdp_server_challenge(FILE *chalfile);
 void printhex(unsigned char *ptr, size_t size);
 
+void destroy_tree_node(tree_node* node);
+int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
+int get_file_size(const char* file);
+unsigned char *merkel_create_node(unsigned char* left_child, unsigned char* right_child);
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3
 PDP_proof *pdp_s3_prove_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, PDP_challenge *challenge, PDP_key *key);
