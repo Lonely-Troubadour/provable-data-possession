@@ -201,11 +201,14 @@ PDP_proof *generate_pdp_proof();
 void destroy_pdp_proof(PDP_proof *proof);
 
 /* My changes */
+typedef struct tree_node_struct tree_node;
 struct tree_node_struct {
 	unsigned char* hash;
-	unsigned char* data;
+	int level;
+	tree_node* left;
+	tree_node* right;	
 };
-typedef struct tree_node_struct tree_node;
+
 
 int write_pdp_challenge(FILE *chalfile, PDP_challenge *chal);
 PDP_challenge *read_pdp_challenge(FILE *chalfile);
@@ -219,6 +222,8 @@ void destroy_tree_node(tree_node* node);
 int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
 int get_file_size(const char* file);
 unsigned char *merkel_create_node(unsigned char* left_child, unsigned char* right_child);
+int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
+
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3
 PDP_proof *pdp_s3_prove_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, PDP_challenge *challenge, PDP_key *key);

@@ -428,37 +428,3 @@ cleanup:
 
 	return 0;
 }
-
-unsigned char *merkel_create_node(unsigned char* left_child, unsigned char* right_child) {
-	tree_node *node = NULL;
-	unsigned char msg[SHA_DIGEST_LENGTH * 2];
-	BIGNUM *m;
-	unsigned char *h_result = NULL;
-	size_t h_size = 0;
-
-	if(!left_child && !right_child) return NULL;
-	memset(msg, 0, SHA_DIGEST_LENGTH*2);
-	if ((node = generate_tree_node()) == NULL) goto cleanup;
-	m = BN_new();	
-
-	memcpy(msg, left_child, SHA_DIGEST_LENGTH); 
-	if (right_child) {
-		memcpy((msg+SHA_DIGEST_LENGTH), right_child, SHA_DIGEST_LENGTH);
-		if(!BN_bin2bn(msg, SHA_DIGEST_LENGTH*2, m)) goto cleanup;
-	} else {
-		if(!BN_bin2bn(msg, SHA_DIGEST_LENGTH, m)) goto cleanup;
-	}
-		
-	h_result = generate_H(m, &h_size);
-
-	printf("Msg:\n");
-	printhex(msg, SHA_DIGEST_LENGTH*2);
-	printf("Hash result:\n");
-	printhex(h_result, h_size);
-	return h_result;
-
-cleanup:
-	if (node) destroy_tree_node(node);
-	if (m) BN_clear_free(m);
-}
-
