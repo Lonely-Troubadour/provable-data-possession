@@ -203,10 +203,11 @@ void destroy_pdp_proof(PDP_proof *proof);
 /* My changes */
 typedef struct tree_node_struct tree_node;
 struct tree_node_struct {
-	unsigned char* hash;
-	int level;
-	tree_node* left;
-	tree_node* right;	
+	unsigned char *hash;
+	unsigned int id;
+	tree_node *left;
+	tree_node *right;	
+	tree_node *parrent;
 };
 
 
@@ -221,8 +222,10 @@ void printhex(unsigned char *ptr, size_t size);
 void destroy_tree_node(tree_node* node);
 int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
 int get_file_size(const char* file);
-unsigned char *merkel_create_node(unsigned char* left_child, unsigned char* right_child);
+tree_node *create_node(tree_node *left_child, tree_node *right_child);
 int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
+tree_node *read_node(FILE *tree_file);
+int construct_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
 
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3

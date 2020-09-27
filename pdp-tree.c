@@ -11,6 +11,12 @@ void destroy_tree_node(tree_node* node) {
 	sfree(node, sizeof(tree_node));
 }
 
+void destroy_tree(tree_node *root) {
+	if (root->left) destroy_tree(root->left);
+	if (root->right) destroy_tree(root->right);
+	destroy_tree_node(root); 
+}
+
 tree_node *generate_tree_node() {
 	tree_node* node = NULL;
 	if ((node = malloc(sizeof(tree_node))) == NULL) return NULL;
@@ -71,17 +77,87 @@ cleanup:
     return NULL;
 }
 
-
-
-/** Write */
-int write_merkel_tree(FILE* tree_file, unsigned char* hash) {
-	if (!tree_file || !hash) goto cleanup;
-	fwrite(hash, SHA_DIGEST_LENGTH, 1, tree_file);
-	if(ferror(tree_file)) goto cleanup;
-
+/** Write tree to disk */
+int write_merkel_tree(FILE* tree_file, tree_node *root) {
+	write_node(tree_file, root);
+	if (root->left) {
+		fwrite("(", sizeof(char), 1, tree_file);
+		write_merkel_tree(tree_file, root->left);
+	}
+	if (root->right) {
+		write_merkel_tree(tree_file, root->right);
+	}
+	if (root->left) fwrite(")", sizeof(char), 1, tree_file);
 	return 1;
 
 cleanup:
+	if (root) destroy_tree(root);
+	return 0;
+}
+
+/* Write node content */
+int write_node(FILE *tree_file, tree_node *node) {
+	if (!tree_file || !node) return 0;
+	fwrite(node->hash, SHA_DIGEST_LENGTH, 1, tree_file);
+	if(ferror(tree_file)) goto cleanup;
+
+cleanup:
+	return 0;
+}
+
+/* Read tree from disk */
+tree_node *read_node(FILE *tree_file) {
+	unsigned char *hash;
+	tree_node *node = NULL;
+	tree_node *root = NULL;
+
+	if (!tree_file) return NULL;
+	if ((node = generate_tree_node()) == NULL) goto cleanup;
+	
+	root = node;
+	node->hash = (unsigned char*) malloc(SHA_DIGEST_LENGTH);
+	fread(node->hash, SHA_DIGEST_LENGTH, 1, tree_file);
+
+	return node;
+
+cleanup:
+	if (hash) sfree(hash, SHA224_DIGEST_LENGTH);
+	if (node) destroy_tree_node(node);
+	return NULL;
+}
+
+int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
+	unsigned char *realtreefilepath[MAXPATHLEN];
+	unsigned char *buf[255];
+	unsigned char *hash[SHA_DIGEST_LENGTH];
+	FILE *file = NULL;
+	tree_node *node = NULL;
+	tree_node *root = NULL;
+
+	snprintf(realtreefilepath, MAXPATHLEN, "%s.tree", filepath);
+	if ( access(realtreefilepath, F_OK) != 0 ) {
+		fprintf(stderr, "File access failed.\n");
+	}
+	file = fopen(realtreefilepath, "r");
+	if (!file) {
+		fprintf(stderr, "Cant open tree file.");
+	}
+
+	if (fseek(file, 0, SEEK_SET) < 0) goto cleanup;
+	
+	root = read_node(file);
+	printf("\n");
+	printhex(root->hash, SHA_DIGEST_LENGTH);
+	
+	fread(buf, sizeof(char), 1, file);
+	fread(buf+sizeof(char), sizeof(char), 1, file);
+	printf("---\n");
+	printhex(buf, 21);
+	// printhex(hash, SHA_DIGEST_LENGTH);
+	printf("---\n");
+	return 1;
+cleanup:
+	if (file) fclose(file);
 	return 0;
 }
 
@@ -89,7 +165,6 @@ int write_tree_size(FILE* tree_file, size_t num_leaves) {
 	if (!tree_file || !num_leaves) goto cleanup;
 	fwrite(&num_leaves, sizeof(size_t), 1, tree_file);
 	if(ferror(tree_file)) goto cleanup;
-
 	return 1;
 
 cleanup:
@@ -158,46 +233,45 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 		fprintf(stderr, "ERROR: Was not able to open %s for reading.\n", filepath);
 		goto cleanup;
 	}
-	// int counter = 0;
+	// int counter = 1;
 	// write_tree_size(tagfile, num_blocks);
-	m = BN_new();
+	if ((m = BN_new()) == NULL) goto cleanup;
 	do{
 		memset(buf, 0, TREE_BLOCKSIZE);
 		fread(buf, TREE_BLOCKSIZE, 1, file);
 		if(ferror(file)) goto cleanup;
 		if(!BN_bin2bn(buf, TREE_BLOCKSIZE, m)) goto cleanup;
 		h_result = generate_H(m, &h_size);
-		// write_merkel_tree(tagfile, h_result);
+
+		printf("File hash:\n");
 		printhex(h_result, SHA_DIGEST_LENGTH);
+
 		node_list[index] = create_leaf(h_result, NULL);
 		index++;
-		// destroy_tree_node(tag);
 	}while(!feof(file));
 
-	/*
+	printf("Start constructing tree...\n");
 	while (index != 1) {
-		// printf("===Index: %d===\n", index);
+		printf("===Index: %d===\n", index);
 		if (index % 2 == 1) {
 			index = index / 2;
 			for (i = 0; i < index; i++) {
-				h_result = merkel_create_node(node_list[2*i], node_list[2*i+1]);
-				write_merkel_tree(tagfile, h_result);
-				node_list[i] = h_result;
+				node_list[i] = create_node(node_list[2*i], node_list[2*i+1]);
+				// write_merkel_tree(tagfile, h_result);
 			}
-			h_result = merkel_create_node(node_list[2*i], NULL);
-			write_merkel_tree(tagfile, h_result);
-			node_list[i] = h_result;
+			node_list[i] = create_node(node_list[2*i], NULL);
+			// write_merkel_tree(tagfile, h_result);
 			index += 1;
 		} else {
 			index /= 2;
 			for (i = 0; i < index; i++) {
-				h_result = merkel_create_node(node_list[i*2], node_list[i*2+1]);
-				write_merkel_tree(tagfile, h_result);
-				node_list[i] = h_result;
+				node_list[i] = create_node(node_list[i*2], node_list[i*2+1]);
+				// write_merkel_tree(tagfile, h_result);
 			}
 		}	
 	}
-    */
+	printf("End...\n");
+	write_merkel_tree(tagfile, node_list[0]);
 
 exit:
 	destroy_pdp_key(key);

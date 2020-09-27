@@ -82,11 +82,19 @@ int main(int argc, char **argv){
                     elapsed = timedifference_msec(t0, t1);
                     printf("Tag time: %f ms\n" ,elapsed);
 					
+					/* Generate tree */
 					gettimeofday(&t0, 0);
 					generate_tree(optarg, strlen(optarg), NULL, 0);
 					gettimeofday(&t1, 0);
 					elapsed = timedifference_msec(t0, t1);
 					printf("Gen tree time: %f", elapsed);
+
+					/* Read tree */
+					gettimeofday(&t0, 0);
+					construct_tree(optarg, strlen(optarg), NULL, 0);
+					gettimeofday(&t1, 0);
+					elapsed = timedifference_msec(t0, t1);
+					printf("Read tree time: %f", elapsed);
                     break;
                 }
 				

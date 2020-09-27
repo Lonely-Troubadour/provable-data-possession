@@ -573,9 +573,7 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 	unsigned int index = 0;
 	char yesorno = 0;
 	char realtagfilepath[MAXPATHLEN];
-	BIGNUM *m;
-	unsigned char *h_result;
-	size_t h_size = 0;
+	
 #ifdef THREADING
 	pthread_t threads[NUM_THREADS];
 	int *thread_return = NULL;
@@ -681,15 +679,11 @@ int pdp_tag_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t 
 		fprintf(stderr, "ERROR: Was not able to open %s for reading.\n", filepath);
 		goto cleanup;
 	}
-	// int counter = 0;
-	m = BN_new();
 	do{
 		memset(buf, 0, PDP_BLOCKSIZE);
 		fread(buf, PDP_BLOCKSIZE, 1, file);
 		if(ferror(file)) goto cleanup;
 		tag = pdp_tag_block(key, buf, PDP_BLOCKSIZE, index);
-		// if(!BN_bin2bn(buf, PDP_BLOCKSIZE, m)) perror("failed.");
-		// h_result = generate_H(m, &h_size);
 		if(!tag) goto cleanup;
 		if(!write_pdp_tag(tagfile, tag)) goto cleanup;
 		index++;
