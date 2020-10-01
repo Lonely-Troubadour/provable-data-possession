@@ -98,17 +98,6 @@ unsigned int *generate_prp_pi(PDP_challenge *challenge){
 	
 	/* Setup the AES key */
 	AES_set_encrypt_key(challenge->k1, PRP_KEY_SIZE * 8, &aes_key);
-	// printhex(challenge->k1, PRP_KEY_SIZE);
-
-	// FILE *ind = NULL;
-	// if( access("/home/vincent/Desktop/ind.txt", F_OK ) != -1 ) {
-    // 	// file exists
-	// 	ind = fopen("/home/vincent/Desktop/newInd.txt", "w");
-	// } else {
-    // 	// file doesn't exist
-	// 	ind = fopen("/home/vincent/Desktop/ind.txt", "w");
-	// }
-	
 
 	/* Choose c blocks from 0 to numfileblocks - 1 without replacement */
 	for(x = 0; x < challenge->numfileblocks && j < challenge->c; x++){
@@ -118,10 +107,6 @@ unsigned int *generate_prp_pi(PDP_challenge *challenge){
 	
 		/* Perform AES on the index */
 		AES_encrypt(prp_input, prp_result, &aes_key);
-
-		// new proof and proof has same prp_input and prp_result
-		// if (x == 0) printhex(prp_input, sizeof(int));
-		// if (x == 0) printhex(prp_result, sizeof(unsigned int));
 	
 		/* Turn the PRP result into a number */
 		memcpy(&index, prp_result, sizeof(unsigned int));
@@ -131,9 +116,6 @@ unsigned int *generate_prp_pi(PDP_challenge *challenge){
 	
 		if( (challenge->numfileblocks - x) * r < challenge->c - j){
 			indices[j] = x;
-			// fprintf(ind, "%d %d\n", j, indices[j]);
-			// if (x < 50)
-				// printf("%d %d\n", x, j);
 			j++;
 		}
 	}

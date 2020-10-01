@@ -78,16 +78,15 @@ cleanup:
 }
 
 /** Write tree to disk */
-int write_merkel_tree(FILE* tree_file, tree_node *root) {
+int write_merkel_tree(FILE* tree_file, tree_node *root, unsigned short level) {
+	fwrite(&level, sizeof(unsigned short), 1, tree_file);
 	write_node(tree_file, root);
-	if (root->left) {
-		fwrite("(", sizeof(char), 1, tree_file);
-		write_merkel_tree(tree_file, root->left);
-	}
-	if (root->right) {
-		write_merkel_tree(tree_file, root->right);
-	}
-	if (root->left) fwrite(")", sizeof(char), 1, tree_file);
+	if (root->left) 
+		write_merkel_tree(tree_file, root->left, (level+1));
+
+	if (root->right) 
+		write_merkel_tree(tree_file, root->right, (level+1));
+
 	return 1;
 
 cleanup:
@@ -109,12 +108,10 @@ cleanup:
 tree_node *read_node(FILE *tree_file) {
 	unsigned char *hash;
 	tree_node *node = NULL;
-	tree_node *root = NULL;
 
 	if (!tree_file) return NULL;
 	if ((node = generate_tree_node()) == NULL) goto cleanup;
 	
-	root = node;
 	node->hash = (unsigned char*) malloc(SHA_DIGEST_LENGTH);
 	fread(node->hash, SHA_DIGEST_LENGTH, 1, tree_file);
 
@@ -128,36 +125,81 @@ cleanup:
 
 int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
 	unsigned char *realtreefilepath[MAXPATHLEN];
-	unsigned char *buf[255];
+	unsigned char buf[255];
 	unsigned char *hash[SHA_DIGEST_LENGTH];
+	unsigned short level = 0;
+	unsigned short prev_level = 0;
+	unsigned short temp = 0;
+	size_t size = 0;
 	FILE *file = NULL;
-	tree_node *node = NULL;
+	tree_node *cur = NULL;
+	tree_node *par = NULL;
 	tree_node *root = NULL;
 
 	snprintf(realtreefilepath, MAXPATHLEN, "%s.tree", filepath);
 	if ( access(realtreefilepath, F_OK) != 0 ) {
 		fprintf(stderr, "File access failed.\n");
 	}
+	printf("\n\n%s\n\n", realtreefilepath);
 	file = fopen(realtreefilepath, "r");
 	if (!file) {
 		fprintf(stderr, "Cant open tree file.");
 	}
 
 	if (fseek(file, 0, SEEK_SET) < 0) goto cleanup;
-	
+	size = fread(&level, sizeof(unsigned short), 1, file);
+	if (!size) goto cleanup;
 	root = read_node(file);
-	printf("\n");
-	printhex(root->hash, SHA_DIGEST_LENGTH);
+	if (!root) goto cleanup;
+
+	cur = par = root;
+	prev_level = level;
 	
-	fread(buf, sizeof(char), 1, file);
-	fread(buf+sizeof(char), sizeof(char), 1, file);
-	printf("---\n");
-	printhex(buf, 21);
+	while (!feof(file)) {
+		size = fread(&level, sizeof(unsigned short), 1, file);
+		if (!size) break;
+		printf("====Level: %d\n", level);
+		cur = read_node(file);
+		printhex(cur->hash, SHA_DIGEST_LENGTH);
+
+		if (prev_level < level) {
+			if (par->left == NULL) {
+				par->left = cur;
+				cur->parent = par;
+				par = cur;
+			} 
+		} else if (prev_level == level) {
+			par = par->parent;
+			if (par->right == NULL) {
+				par->right = cur;
+				cur->parent = par;
+				par = cur;
+			}
+		} else {
+			temp = prev_level - level + 1;
+			for (int i = temp; temp > 0; temp--) 
+				par = par->parent;
+			if (par->right == NULL) {
+				par->right = cur;
+				cur->parent = par;
+				par = cur;
+			}
+		}
+		prev_level = level;
+	}
+
+	// fread(buf, sizeof(char), 1, file);
+	// fread(buf+sizeof(char), sizeof(char), 1, file);
+	// printf("---\n");
+	// printhex(buf, 21);
 	// printhex(hash, SHA_DIGEST_LENGTH);
-	printf("---\n");
+	// printf("---\n");
+	fclose(file);
 	return 1;
+
 cleanup:
 	if (file) fclose(file);
+	if (root) destroy_tree(root);
 	return 0;
 }
 
@@ -257,21 +299,18 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 			index = index / 2;
 			for (i = 0; i < index; i++) {
 				node_list[i] = create_node(node_list[2*i], node_list[2*i+1]);
-				// write_merkel_tree(tagfile, h_result);
 			}
 			node_list[i] = create_node(node_list[2*i], NULL);
-			// write_merkel_tree(tagfile, h_result);
 			index += 1;
 		} else {
 			index /= 2;
 			for (i = 0; i < index; i++) {
 				node_list[i] = create_node(node_list[i*2], node_list[i*2+1]);
-				// write_merkel_tree(tagfile, h_result);
 			}
 		}	
 	}
 	printf("End...\n");
-	write_merkel_tree(tagfile, node_list[0]);
+	write_merkel_tree(tagfile, node_list[0], 0);
 
 exit:
 	destroy_pdp_key(key);

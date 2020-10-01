@@ -204,10 +204,10 @@ void destroy_pdp_proof(PDP_proof *proof);
 typedef struct tree_node_struct tree_node;
 struct tree_node_struct {
 	unsigned char *hash;
-	unsigned int id;
+	unsigned int level;
 	tree_node *left;
-	tree_node *right;	
-	tree_node *parrent;
+	tree_node *right;
+	tree_node *parent;
 };
 
 

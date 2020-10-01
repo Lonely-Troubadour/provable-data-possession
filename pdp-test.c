@@ -87,7 +87,7 @@ int main(int argc, char **argv){
 					generate_tree(optarg, strlen(optarg), NULL, 0);
 					gettimeofday(&t1, 0);
 					elapsed = timedifference_msec(t0, t1);
-					printf("Gen tree time: %f", elapsed);
+					printf("Gen tree time: %f\n", elapsed);
 
 					/* Read tree */
 					gettimeofday(&t0, 0);

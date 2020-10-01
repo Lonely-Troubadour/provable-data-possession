@@ -4,8 +4,8 @@
 
 S3LIB = ../libs3-1.4/build/lib/libs3.a
 
-all: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-tree.o pdp-test.c
-	gcc -g -Wall -O3 -o pdp pdp-test.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o pdp-tree.o -L/usr/local/openssl -lssl -lpthread -lcrypto -ldl
+all: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-tree.o pdp-utils.o pdp-test.c
+	gcc -g -Wall -O3 -o pdp pdp-test.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o pdp-tree.o pdp-utils.o -L/usr/local/openssl -lssl -lpthread -lcrypto -ldl
 
 measurements: pdp-misc.o pdp.h pdp-core.o pdp-keys.o pdp-file.o pdp-measurements.c 
 	gcc -pg -g -Wall -O3 -o pdp-m pdp-measurements.c pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o -L/usr/local/openssl -lssl -lpthread -lcrypto -ldl
@@ -30,6 +30,9 @@ pdp-s3.o: pdp-s3.c pdp.h ../libs3-1.4/build/include/libs3.h
 
 pdp-tree.o: pdp-tree.c pdp.h
 	gcc -g -Wall -O3 -c pdp-tree.c
+
+pdp-utils.o: pdp-utils.c pdp.h
+	gcc -g -Wall -O3 -c pdp-utils.c
 
 pdplib: pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o
 	ar -rv pdplib.a pdp-core.o pdp-misc.o pdp-keys.o pdp-file.o
