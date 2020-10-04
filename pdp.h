@@ -50,6 +50,10 @@
  * sampled blocks is high. */
 #define USE_E_PDP
 
+/* If MERKEL_PDP is defined, the protocol uses merkel hash tree and combined with
+ * original PDP scheme. */
+// #define USE_M_PDP
+
 /* Tagging is "embarrassingly" parallelizable as each tag can be calculated
  * independenlty.  During tagging, N threads can be spawned, dividing the file
  * into N sections.  Each thread processes every Nth block of a file */
@@ -69,7 +73,7 @@
 #define RSA_E RSA_F4
 
 #define PDP_BLOCKSIZE 4096 /* 4Kbytes */
-#define TREE_BLOCKSIZE 524288
+#define TREE_BLOCKSIZE 4096 // 524288
 /* 460 blocks gives you 99% chance of detecting an error, 300 blocks gives you 95% chance*/
 #define MAGIC_NUM_CHALLENGE_BLOCKS 460
 
@@ -102,15 +106,21 @@ struct PDP_key_struct{
 
 typedef struct PDP_tag_struct PDP_tag;
 
+
 struct PDP_tag_struct{
-	
+#ifdef USE_M_PDP
+
+	BIGNUM *Tm;
+
+#else
+
 	BIGNUM *Tim;			/* The tag of the message block i T_i,m = (h(W_i) * g^m)^d */
 	unsigned int index;     /* The index of the block, i */
 	unsigned char *index_prf; /* The pseudo-random function output of the index W_i = w_v(i) */
 	size_t index_prf_size;	/* The size of the prf output */
 
+#endif
 };
-
 
 typedef struct PDP_challenge_struct PDP_challenge;
 

@@ -4,19 +4,21 @@
 #include <sys/types.h>
 #include <sys/param.h>
 
-/** Destroy, generate, create */
+/** Destroy tree node */
 void destroy_tree_node(tree_node* node) {
 	if (!node) return;
 	if(node->hash) sfree(node->hash, SHA_DIGEST_LENGTH);
 	sfree(node, sizeof(tree_node));
 }
 
+/** Destroy tree */
 void destroy_tree(tree_node *root) {
 	if (root->left) destroy_tree(root->left);
 	if (root->right) destroy_tree(root->right);
 	destroy_tree_node(root); 
 }
 
+/** Generate tree node */
 tree_node *generate_tree_node() {
 	tree_node* node = NULL;
 	if ((node = malloc(sizeof(tree_node))) == NULL) return NULL;
@@ -24,6 +26,7 @@ tree_node *generate_tree_node() {
 	return node;
 }
 
+/** Create leaf */
 tree_node *create_leaf(unsigned char *left, unsigned char *right) {
     tree_node *node = NULL;
 	unsigned char msg[SHA_DIGEST_LENGTH * 2];
@@ -47,10 +50,7 @@ tree_node *create_leaf(unsigned char *left, unsigned char *right) {
     node->left = NULL;
     node->right = NULL;
 
-	printf("Msg:\n");
-	printhex(msg, SHA_DIGEST_LENGTH*2);
-	printf("Node hash:\n");
-	printhex(node->hash, h_size);
+	if (m) BN_clear_free(m);
 	return node;
 
 cleanup:
@@ -59,6 +59,7 @@ cleanup:
     return NULL;
 }
 
+/** Create tree node */
 tree_node *create_node(tree_node* left_child, tree_node* right_child) {
 	tree_node* node = NULL;
     unsigned char *left = NULL, *right = NULL;
@@ -104,7 +105,7 @@ cleanup:
 	return 0;
 }
 
-/* Read tree from disk */
+/* Read tree node from disk */
 tree_node *read_node(FILE *tree_file) {
 	unsigned char *hash;
 	tree_node *node = NULL;
@@ -123,6 +124,7 @@ cleanup:
 	return NULL;
 }
 
+/** Constuct tree from reading tree file */
 int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
 	unsigned char *realtreefilepath[MAXPATHLEN];
 	unsigned char buf[255];
@@ -132,6 +134,7 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 	unsigned short temp = 0;
 	size_t size = 0;
 	FILE *file = NULL;
+	FILE *fp = NULL;
 	tree_node *cur = NULL;
 	tree_node *par = NULL;
 	tree_node *root = NULL;
@@ -140,7 +143,7 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 	if ( access(realtreefilepath, F_OK) != 0 ) {
 		fprintf(stderr, "File access failed.\n");
 	}
-	printf("\n\n%s\n\n", realtreefilepath);
+	// printf("\n\n%s\n\n", realtreefilepath);
 	file = fopen(realtreefilepath, "r");
 	if (!file) {
 		fprintf(stderr, "Cant open tree file.");
@@ -158,9 +161,9 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 	while (!feof(file)) {
 		size = fread(&level, sizeof(unsigned short), 1, file);
 		if (!size) break;
-		printf("====Level: %d\n", level);
+		// printf("====Level: %d\n", level);
 		cur = read_node(file);
-		printhex(cur->hash, SHA_DIGEST_LENGTH);
+		// printhex(cur->hash, SHA_DIGEST_LENGTH);
 
 		if (prev_level < level) {
 			if (par->left == NULL) {
@@ -188,12 +191,9 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 		prev_level = level;
 	}
 
-	// fread(buf, sizeof(char), 1, file);
-	// fread(buf+sizeof(char), sizeof(char), 1, file);
-	// printf("---\n");
-	// printhex(buf, 21);
-	// printhex(hash, SHA_DIGEST_LENGTH);
-	// printf("---\n");
+	// fp = fopen("/home/v/Desktop/new.tree", "w");
+	// write_merkel_tree(fp, root, 0);
+	// fclose(fp);
 	fclose(file);
 	return 1;
 
@@ -203,6 +203,7 @@ cleanup:
 	return 0;
 }
 
+/** Deprecated. Write tree size */
 int write_tree_size(FILE* tree_file, size_t num_leaves) {
 	if (!tree_file || !num_leaves) goto cleanup;
 	fwrite(&num_leaves, sizeof(size_t), 1, tree_file);
@@ -213,6 +214,7 @@ cleanup:
 	return 0;
 }
 
+/** Generate tree from file */
 int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len) {
 	PDP_key *key = NULL;
 	FILE *file = NULL;
@@ -229,7 +231,8 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 	size_t h_size = 0;
 	int num_blocks = 0;
 	size_t file_size = 0;
-	tree_node *node_list[20];
+	tree_node **node_list = NULL;
+	tree_node *tmp = NULL, *left = NULL, *right = NULL;
 	int i = 0;
 
 	memset(realtagfilepath, 0, MAXPATHLEN);
@@ -245,6 +248,8 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 		num_blocks = file_size / TREE_BLOCKSIZE + 1;
 
 	printf("File size: %d, Num_blocks: %d \n", get_file_size(filepath), num_blocks);
+	node_list = (tree_node**) malloc(sizeof(tree_node*) * num_blocks);
+	memset(node_list, 0, sizeof(tree_node*) * num_blocks);
 
 	/* If no tag file path is specified, add a .tag extension to the filepath */
 	if(!tagfilepath && (filepath_len < MAXPATHLEN - 6)){
@@ -285,8 +290,8 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 		if(!BN_bin2bn(buf, TREE_BLOCKSIZE, m)) goto cleanup;
 		h_result = generate_H(m, &h_size);
 
-		printf("File hash:\n");
-		printhex(h_result, SHA_DIGEST_LENGTH);
+		// printf("File hash:\n");
+		// printhex(h_result, SHA_DIGEST_LENGTH);
 
 		node_list[index] = create_leaf(h_result, NULL);
 		index++;
@@ -295,25 +300,41 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 	printf("Start constructing tree...\n");
 	while (index != 1) {
 		printf("===Index: %d===\n", index);
+		// printf("\n tmp = %p \n", tmp);
 		if (index % 2 == 1) {
-			index = index / 2;
+			index /= 2;
 			for (i = 0; i < index; i++) {
-				node_list[i] = create_node(node_list[2*i], node_list[2*i+1]);
+				left = node_list[2*i]; 
+				right = node_list[2*i+1];
+				
+				node_list[i] = create_node(left, right);
 			}
-			node_list[i] = create_node(node_list[2*i], NULL);
+			
+			node_list[i] = create_node(left, NULL);
+			
 			index += 1;
 		} else {
 			index /= 2;
 			for (i = 0; i < index; i++) {
-				node_list[i] = create_node(node_list[i*2], node_list[i*2+1]);
+				tmp = node_list[i];
+				left = node_list[2*i];
+				right = node_list[2*i+1];
+
+				node_list[i] = create_node(left, right);
 			}
-		}	
+		}
+		
 	}
 	printf("End...\n");
 	write_merkel_tree(tagfile, node_list[0], 0);
 
 exit:
+	if(m) BN_clear_free(m);
 	destroy_pdp_key(key);
+	for (int i = 0; i < num_blocks; i++)
+		if (node_list[i]) destroy_tree_node(node_list[i]);
+
+	sfree(node_list, sizeof(tree_node*) * num_blocks);
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
 
