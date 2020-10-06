@@ -428,19 +428,38 @@ cleanup:
 
 void destroy_pdp_tag(PDP_tag *tag){
 
+#ifdef USE_M_PDP
+	if(!tag) return;
+	if(tag->Tim) BN_clear_free(tag->Tim);
+	if(tag->hm) BN_clear_free(tag->hm);
+	sfree(tag, sizeof(PDP_tag));
+#else
 	if(!tag) return;
 	if(tag->Tim) BN_clear_free(tag->Tim);
 	if(tag->index_prf && (tag->index_prf_size > 0)) sfree(tag->index_prf, tag->index_prf_size);	
 	sfree(tag, sizeof(PDP_tag));
+#endif
 }
 
 PDP_tag *generate_pdp_tag(){
 	
 	PDP_tag *tag = NULL;
 	
+#ifdef USE_M_PDP
+
+	if( ((tag = malloc(sizeof(PDP_tag))) == NULL)) return NULL;
+	memset(tag, 0, sizeof(PDP_tag));
+
+	if( ((tag->Tim = BN_new()) == NULL)) goto cleanup;
+	if( ((tag->hm = BN_new()) == NULL)) goto cleanup;
+
+#else
+
 	if( ((tag = malloc(sizeof(PDP_tag))) == NULL)) return NULL;
 	memset(tag, 0, sizeof(PDP_tag));
 	if( ((tag->Tim = BN_new()) == NULL)) goto cleanup;
+
+#endif
 
 	return tag;
 	
@@ -448,7 +467,6 @@ cleanup:
 	if(tag) destroy_pdp_tag(tag);
 	return NULL;
 }
-
 
 int get_file_size(const char* file) {
     struct stat tbuf;

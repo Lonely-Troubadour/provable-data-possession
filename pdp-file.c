@@ -45,9 +45,39 @@
 static int write_pdp_tag(FILE *tagfile, PDP_tag *tag){
 
 	unsigned char *tim = NULL;
+	unsigned char *hm = NULL;
 	size_t tim_size = 0;
+	size_t hm_size = 0;
 
 	if(!tagfile || !tag || !tag->Tim) return 0;
+
+#ifdef USE_M_PDP
+
+	/* Write Tim to disk */
+	tim_size = BN_num_bytes(tag->Tim);
+	fwrite(&tim_size, sizeof(size_t), 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+	if( ((tim = malloc(tim_size)) == NULL)) goto cleanup;
+	memset(tim, 0, tim_size);
+	if(!BN_bn2bin(tag->Tim, tim)) goto cleanup;
+	fwrite(tim, tim_size, 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+
+	/* write h(m) */
+	hm_size = BN_num_bytes(tag->hm);
+	fwrite(&hm_size, sizeof(size_t), 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+	if( ((hm = malloc(hm_size)) == NULL)) goto cleanup;
+	memset(hm, 0, hm_size);
+	if(!BN_bn2bin(tag->hm, hm)) goto cleanup;
+	fwrite(hm, hm_size, 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+
+	if(tim) sfree(tim, tim_size);
+	if(hm) sfree(hm, hm_size);
+	return 1;
+
+#else
 
 	/* Write Tim to disk */
 	tim_size = BN_num_bytes(tag->Tim);
@@ -72,8 +102,11 @@ static int write_pdp_tag(FILE *tagfile, PDP_tag *tag){
 	if(tim) sfree(tim, tim_size);
 	return 1;
 
+#endif
+
 cleanup:
 	if(tim) sfree(tim, tim_size);
+	if(hm) sfree(hm, hm_size);
 	return 0;
 }
 
@@ -85,7 +118,9 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 
 	PDP_tag *tag = NULL;
 	unsigned char *tim = NULL;
+	unsigned char *hm = NULL;
 	size_t tim_size = 0;
+	size_t hm_size = 0;
 	size_t index_prf_size = 0;
 	int i = 0;
 
@@ -96,6 +131,41 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 
 	/* Seek to start of tag file */
 	if(fseek(tagfile, 0, SEEK_SET) < 0) goto cleanup;
+
+#ifdef USE_M_PDP
+
+	/* Seek to tag offset index */
+	for(i = 0; i < index; i++){
+		fread(&tim_size, sizeof(size_t), 1, tagfile);
+		if(ferror(tagfile)) goto cleanup;
+		if(fseek(tagfile, (tim_size), SEEK_CUR) < 0) goto cleanup;
+		fread(&(hm_size), sizeof(size_t), 1, tagfile);
+		if(fseek(tagfile, (hm_size), SEEK_CUR) < 0) goto cleanup;
+	}
+
+	/*Read in Tim */
+	fread(&tim_size, sizeof(size_t), 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+	if( ((tim = malloc((unsigned int)tim_size)) == NULL)) goto cleanup;
+	memset(tim, 0, (unsigned int)tim_size);
+	fread(tim, (unsigned int)tim_size, 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+
+	if(!BN_bin2bn(tim, tim_size, tag->Tim)) goto cleanup;
+
+	/* write h(m) */
+	fread(&hm_size, sizeof(size_t), 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+	if( ((hm = malloc((unsigned int)hm_size)) == NULL)) goto cleanup;
+	memset(hm, 0, (unsigned int)hm_size);
+	fread(hm, (unsigned int)hm_size, 1, tagfile);
+	if(ferror(tagfile)) goto cleanup;
+
+	if(!BN_bin2bn(hm, hm_size, tag->hm)) goto cleanup;
+
+	if(tim) sfree(tim, tim_size);
+	if(hm) sfree(hm, hm_size);
+#else
 
 	/* Seek to tag offset index */
 	for(i = 0; i < index; i++){
@@ -130,10 +200,23 @@ PDP_tag *read_pdp_tag(FILE *tagfile, unsigned int index){
 
 	if(tim) sfree(tim, tim_size);
 
+#endif
+
 	return tag;
 
 cleanup:
+
+#ifdef USE_M_PDP
+
+	if (hm) sfree(hm, hm_size);
+	if (tim) sfree(tim, tim_size);
+	
+#else
+
 	if(tag->index_prf) sfree(tag->index_prf, tag->index_prf_size);
+
+#endif
+
 	if(tag) destroy_pdp_tag(tag);
 	if(tim) sfree(tim, tim_size);
 
@@ -312,11 +395,11 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 
 		/* Read tag for data block at indices[j] */
 		tag = read_pdp_tag(tagfile, indices[j]);
+		// printf("%ld, %ld\n", BN_num_bytes(tag->Tim), BN_num_bytes(tag->hm));
 		if(!tag) goto cleanup;
 
 		proof = pdp_generate_proof_update(key, challenge, tag, proof, buf, PDP_BLOCKSIZE, j);
 		if(!proof) goto cleanup;
-
 		destroy_pdp_tag(tag);
 		tag = NULL;
 	}
@@ -339,7 +422,7 @@ cleanup:
 	return NULL;
 }
 
-int pdp_verify_file(PDP_challenge *challenge, PDP_proof *proof){
+int pdp_verify_file(char *filepath, PDP_challenge *challenge, PDP_proof *proof){
 
 	PDP_key *key = NULL;
 	int result = 0;
@@ -349,8 +432,7 @@ int pdp_verify_file(PDP_challenge *challenge, PDP_proof *proof){
 	/* Get the PDP key */
 	key = pdp_get_keypair();
 	if(!key) return 0;
-
-	result = pdp_verify_proof(key, challenge, proof);
+	result = pdp_verify_proof(filepath, key, challenge, proof);
 
 	if(key) destroy_pdp_key(key);
 
@@ -444,7 +526,7 @@ int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tag
 	proof = pdp_generate_proof_final(key, challenge, proof);
 	if(!proof) goto cleanup;
 
-	result = pdp_verify_proof(key, challenge, proof);
+	result = pdp_verify_proof(filepath, key, challenge, proof);
 
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
 	if(challenge) destroy_pdp_challenge(challenge);

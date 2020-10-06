@@ -270,8 +270,7 @@ int write_pdp_proof(FILE *prooffile, PDP_proof *proof) {
 	size_t T_size = 0;
 	size_t rho_temp_size = 0;
 
-	if (!prooffile || !proof || !proof->T || !proof->rho_temp) return 0;
-
+	if (!prooffile || !proof || !proof->T || !proof->rho_temp || !proof->rho) return 0;
 
 	/* Write T, product of tags to file */
 	T_size = BN_num_bytes(proof->T);

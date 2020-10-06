@@ -52,7 +52,7 @@
 
 /* If MERKEL_PDP is defined, the protocol uses merkel hash tree and combined with
  * original PDP scheme. */
-// #define USE_M_PDP
+#define USE_M_PDP
 
 /* Tagging is "embarrassingly" parallelizable as each tag can be calculated
  * independenlty.  During tagging, N threads can be spawned, dividing the file
@@ -110,7 +110,8 @@ typedef struct PDP_tag_struct PDP_tag;
 struct PDP_tag_struct{
 #ifdef USE_M_PDP
 
-	BIGNUM *Tm;
+	BIGNUM *Tim;
+	BIGNUM *hm;
 
 #else
 
@@ -154,7 +155,7 @@ PDP_challenge *pdp_challenge_file(unsigned int numfileblocks);
  * Also, the key structures should only contain the public components.  See: pdp_get_pubkey() */
 PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len, PDP_challenge *challenge, PDP_key *key);
 
-int pdp_verify_file(PDP_challenge *challenge, PDP_proof *proof);
+int pdp_verify_file(char *filepath, PDP_challenge *challenge, PDP_proof *proof);
 
 /* This function is really used more testing as it does challenging, proof generation and verification */
 int pdp_challenge_and_verify_file(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
@@ -172,7 +173,7 @@ PDP_proof *pdp_generate_proof_update(PDP_key *key, PDP_challenge *challenge, PDP
 
 PDP_proof *pdp_generate_proof_final(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof);
 
-int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof);
+int pdp_verify_proof(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP_proof *proof);
 
 
 /* PDP keying functions pdp-key.c */

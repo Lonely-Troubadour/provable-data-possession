@@ -60,6 +60,37 @@ PDP_tag *pdp_tag_block(PDP_key *key, unsigned char *block, size_t blocksize, uns
 	if( ((r1 = BN_new()) == NULL)) goto cleanup;
 	if( ((ctx = BN_CTX_new()) == NULL)) goto cleanup;
 	
+#ifdef USE_M_PDP
+	
+	/* Calculate h(m) */
+	if (!(tag->hm = generate_fdh_h(key, block, blocksize))) goto cleanup;
+	// printf("==== h(m) ====\n");
+	// printf("%ld\n", BN_num_bytes(tag->hm));
+	// printhex(BN_num_bytes(tag->hm));
+
+	/* Turn the data block into a BIGNUM */
+	message = BN_bin2bn(block, blocksize, NULL);
+	if(!message) goto cleanup;
+	
+	/* Calculate phi */
+	if (!BN_sub(r0, key->rsa->p, BN_value_one())) goto cleanup;	/* p-1 */
+	if (!BN_sub(r1, key->rsa->q, BN_value_one())) goto cleanup;	/* q-1 */
+	if (!BN_mul(phi, r0, r1, ctx)) goto cleanup;	/* phi = (p-1)(q-1) */
+	
+	/* Reduce the message by modulo phi(N) */
+	if(!BN_mod(message, message, phi, ctx)) goto cleanup;
+	
+	/* r0 = g^m */
+	if(!BN_mod_exp(r0, key->g, message, key->rsa->n, ctx)) goto cleanup;
+	/* r1 = h(m) * g^m */
+	if(!BN_mul(r1, tag->hm, r0, ctx)) goto cleanup;
+	/* T_im = (h(m) * g^m)^d mod N */
+	if(!BN_mod_exp(tag->Tim, r1, key->rsa->d, key->rsa->n, ctx)) goto cleanup;
+	// printf("==== Tim ====\n");
+	// printf("%ld\n", BN_num_bytes(tag->Tim));
+	// printhex(tag->Tim, BN_num_bytes(tag->Tim));
+	
+#else
 	/* Set the index */
 	tag->index = index;
 	
@@ -92,13 +123,15 @@ PDP_tag *pdp_tag_block(PDP_key *key, unsigned char *block, size_t blocksize, uns
 	/* T_im = (h(W_i) * g^m)^d mod N */
 	if(!BN_mod_exp(tag->Tim, r1, key->rsa->d, key->rsa->n, ctx)) goto cleanup;
 	
+#endif
+
 	if(message) BN_clear_free(message);
 	if(phi) BN_clear_free(phi);
 	if(r0) BN_clear_free(r0);
 	if(r1) BN_clear_free(r1);
 	if(ctx) BN_CTX_free(ctx);
 	if(fdh_hash) BN_clear_free(fdh_hash);
-		
+
 	return tag;
 	
 cleanup:
@@ -203,8 +236,20 @@ PDP_proof *pdp_generate_proof_update(PDP_key *key, PDP_challenge *challenge, PDP
 		
 	/* Data block into a BIGNUM */
 	if(!BN_bin2bn(block, blocksize, message)) goto cleanup;
-	
-#ifdef USE_E_PDP /* Use E-PDP */
+
+#ifdef USE_M_PDP
+
+	/* No coefficients to calculate in E-PDP, so T is just product of tags */
+	if(BN_is_zero(proof->T)){
+		if(!BN_copy(proof->T, tag->Tim)) goto cleanup;
+	}else{
+		if(!BN_mul(proof->T, proof->T, tag->Tim, ctx)) goto cleanup;
+	}
+
+	/* Copy message into r0 for summing */
+	if(!BN_copy(r0, message)) goto cleanup;
+
+#elif defined USE_E_PDP /* Use E-PDP */
 
 	/* No coefficients to calculate in E-PDP, so T is just product of tags */
 	if(BN_is_zero(proof->T)){
@@ -302,7 +347,7 @@ cleanup:
  * Takes a user's pdp-key, a challenge, its correspond proof and the file size in blocks.
  * Returns a 1 if verified, 0 otherwise.
  */
-int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
+int pdp_verify_proof(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	
 	BIGNUM *tao = NULL;
 	BIGNUM *denom = NULL;
@@ -320,6 +365,8 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	unsigned int j = 0;
 	int result = 0;
 	unsigned int *indices = NULL;
+	PDP_tag *tag = NULL;
+	FILE *tagfile = NULL;
 
 	if(!key || !challenge || !proof) return -1;
 
@@ -338,6 +385,13 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	if( ((r0 = BN_new()) == NULL)) goto cleanup;
 	if( ((tao_s = BN_new()) == NULL)) goto cleanup;
 	if( ((ctx = BN_CTX_new()) == NULL)) goto cleanup;
+
+	/* Check tag file */
+	tagfile = fopen(filepath, "r");
+	if (!tagfile) {
+		fprintf(stderr, "Error: Cannot open tag feil.");
+		goto cleanup;
+	}
 		
 	/* Compute tao where tao = T^e */
 	if(!BN_mod_exp(tao, proof->T, key->rsa->e, key->rsa->n, ctx)) goto cleanup;	
@@ -345,6 +399,14 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	/* Compute the indices i_j = pi_k1(j); the indices of blocks to sample */
 	indices = generate_prp_pi(challenge);
 	for(j = 0; j < challenge->c; j++){
+
+#ifdef USE_M_PDP
+
+		tag = read_pdp_tag(tagfile, indices[j]);
+		if (!BN_copy(r0, tag->hm)) goto cleanup;
+
+#elif defined USE_E_PDP /* Use E-PDP */
+
 		/* Perform the pseudo-random function Wi = w_v(i) */
 		index_prf = generate_prf_w(key, indices[j], &index_prf_size);
 		if(!index_prf) goto cleanup;
@@ -352,8 +414,6 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 		/* Calculate the full-domain hash h(W_i) */
 		fdh_hash = generate_fdh_h(key, index_prf, index_prf_size);
 		if(!fdh_hash) goto cleanup;
-
-#ifdef USE_E_PDP /* Use E-PDP */
 
 		/* No coefficients in E-PDP, so just copy FDH result in */
 		if(!BN_copy(r0, fdh_hash)) goto cleanup;
@@ -371,6 +431,7 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 		if(!BN_mod_exp(r0, fdh_hash, coefficient_a, key->rsa->n, ctx)) goto cleanup;
 	
 #endif
+
 		/* Calculate products of h(W_i)^a (no coefficeint a in E-PDP) */
 		if(BN_is_zero(denom)){
 			if(!BN_copy(denom, r0)) goto cleanup;
@@ -381,6 +442,7 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 		/* Free memory befor next loop iteration */
 		if(index_prf && (index_prf_size > 0)) sfree(index_prf, index_prf_size);
 		if(fdh_hash) BN_clear_free(fdh_hash);
+		if(tag) destroy_pdp_tag(tag);
 	} /* end for */
 	
 	/* Calculate tao, where tao = tao/h(W_i)^a mod N */
@@ -410,7 +472,8 @@ int pdp_verify_proof(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof){
 	if(prf_result && (prf_result_size > 0)) sfree(prf_result, prf_result_size);	
 	if(H_result && (H_result_size > 0)) sfree(H_result, H_result_size);	
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
-	
+	fclose(tagfile);
+
 	return result;
 
 cleanup:
@@ -425,6 +488,8 @@ cleanup:
 	if(prf_result && (prf_result_size > 0)) sfree(prf_result, prf_result_size);
 	if(H_result && (H_result_size > 0)) sfree(H_result, H_result_size);
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
+	if(tag) destroy_pdp_tag(tag);
+	fclose(tagfile);
 
 	return 0;
 }

@@ -55,6 +55,7 @@ int main(int argc, char **argv){
 	FILE *chalfile = NULL;
 	char chalpath[MAXPATHLEN];
 	char proofpath[MAXPATHLEN];
+	char tagpath[MAXPATHLEN];
 
     gettimeofday(&t0, 0);
 
@@ -83,18 +84,18 @@ int main(int argc, char **argv){
                     printf("Tag time: %f ms\n" ,elapsed);
 					
 					/* Generate tree */
-					gettimeofday(&t0, 0);
-					generate_tree(optarg, strlen(optarg), NULL, 0);
-					gettimeofday(&t1, 0);
-					elapsed = timedifference_msec(t0, t1);
-					printf("Gen tree time: %f ms\n", elapsed);
+					// gettimeofday(&t0, 0);
+					// generate_tree(optarg, strlen(optarg), NULL, 0);
+					// gettimeofday(&t1, 0);
+					// elapsed = timedifference_msec(t0, t1);
+					// printf("Gen tree time: %f ms\n", elapsed);
 
 					/* Read tree */
-					gettimeofday(&t0, 0);
-					construct_tree(optarg, strlen(optarg), NULL, 0);
-					gettimeofday(&t1, 0);
-					elapsed = timedifference_msec(t0, t1);
-					printf("Read tree time: %f ms", elapsed);
+					// gettimeofday(&t0, 0);
+					// construct_tree(optarg, strlen(optarg), NULL, 0);
+					// gettimeofday(&t1, 0);
+					// elapsed = timedifference_msec(t0, t1);
+					// printf("Read tree time: %f ms", elapsed);
                     break;
                 }
 				
@@ -124,6 +125,7 @@ int main(int argc, char **argv){
 				/* Get proof */
 				gettimeofday(&t0, 0);
 				proof = pdp_prove_file(optarg, strlen(optarg), NULL, 0, server_challenge, key);
+				if (!proof) fprintf(stderr, "No proof!\n");
                 gettimeofday(&t1, 0);
                 elapsed = timedifference_msec(t0, t1);
                 printf("GenProof: %f ms\n", elapsed);
@@ -131,11 +133,9 @@ int main(int argc, char **argv){
 				/* Write proof file to disk and read in */
 				snprintf(chalpath, MAXPATHLEN, "%s.chal", optarg);
 				snprintf(proofpath, MAXPATHLEN, "%s.proof", optarg);
-				// fprintf(stdout, "%s\n", chalpath);
-				// fprintf(stdout, "%s\n", proofpath);
 
 				prooffile = fopen(proofpath, "w");
-				if(!write_pdp_proof(prooffile, proof)) fprintf(stderr, "Write proof failed!\n");
+				if(!write_pdp_proof(prooffile, proof)) fprintf(stderr, "WTF> Write proof failed!\n");
 				fclose(prooffile);
 				destroy_pdp_proof(proof);
 
@@ -149,6 +149,7 @@ int main(int argc, char **argv){
 			case 'v':
 				snprintf(chalpath, MAXPATHLEN, "%s.chal", optarg);
 				snprintf(proofpath, MAXPATHLEN, "%s.proof", optarg);
+				snprintf(tagpath, MAXPATHLEN, "%s.tag", optarg);
 				// fprintf(stdout, "%s\n", chalpath);
 				// fprintf(stdout, "%s\n", proofpath);
 
@@ -195,16 +196,19 @@ int main(int argc, char **argv){
 				prooffile = fopen(proofpath, "r");
 				proof = read_pdp_proof(prooffile);
 				fclose(prooffile);
+				
 				if(!challenge) fprintf(stderr, "No challenge\n");
 			   	if(!proof) fprintf(stderr, "No proof\n");
+
                 gettimeofday(&t0, 0);
-				if(pdp_verify_file(challenge, proof))
+				if(pdp_verify_file(tagpath, challenge, proof))
 					fprintf(stdout, "Verified!\n");
 				else
 					fprintf(stdout, "Cheating!\n");
 				gettimeofday(&t1, 0);
                 elapsed = timedifference_msec(t0, t1);
                 printf("CheckProof: %f ms\n", elapsed);
+
 				destroy_pdp_challenge(challenge);
 				destroy_pdp_challenge(server_challenge);
 				destroy_pdp_proof(proof);

@@ -127,7 +127,6 @@ cleanup:
 /** Constuct tree from reading tree file */
 int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
 	unsigned char *realtreefilepath[MAXPATHLEN];
-	unsigned char buf[255];
 	unsigned char *hash[SHA_DIGEST_LENGTH];
 	unsigned short level = 0;
 	unsigned short prev_level = 0;
