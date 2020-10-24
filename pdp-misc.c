@@ -373,6 +373,15 @@ void destroy_pdp_proof(PDP_proof *proof){
 	if(proof->T) BN_clear_free(proof->T);
 	if(proof->rho_temp) BN_clear_free(proof->rho_temp);
 	if(proof->rho && (proof->rho_size > 0)) sfree(proof->rho, proof->rho_size);
+
+#ifdef USE_M_PDP
+
+	if(proof->root && (proof->root_size > 0)) sfree(proof->root, proof->root_size);
+	if(proof->leaves && (proof->leaves_size > 0)) sfree(proof->leaves, proof->leaves_size);
+	if(proof->aux_path && (proof->aux_path_size > 0)) sfree(proof->aux_path, proof->leaves_size);
+
+#endif
+
 	sfree(proof, sizeof(PDP_proof));
 	proof = NULL;
 }

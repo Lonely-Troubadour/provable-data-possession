@@ -144,6 +144,17 @@ struct PDP_proof_struct{
 	unsigned char *rho;	/* Final rho */
 	size_t rho_size;	/* size of the final rho */
 
+#ifdef USE_M_PDP
+
+	unsigned char *root;    /* proof of root */
+	size_t root_size;       /* size of proof of root */
+	unsigned char *leaves;  /* Concatination of all leaves */
+	size_t leaves_size;     /* Size of concatnation */
+	unsigned char *aux_path;/* Auxilary paths */
+	size_t aux_path_size;   /* Size of all auxilary paths */
+
+#endif
+
 };
 
 /* PDP file operations in pdp-file.c */
@@ -236,7 +247,13 @@ int get_file_size(const char* file);
 tree_node *create_node(tree_node *left_child, tree_node *right_child);
 int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
 tree_node *read_node(FILE *tree_file);
-int construct_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
+tree_node* construct_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t tagfilepath_len);
+PDP_proof *pdp_generate_proof_root(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof, tree_node *root);
+tree_node * read_root(char *treefilepath);
+int check_root(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP_proof *proof);
+tree_node *find_leaf(tree_node *root, int j);
+tree_node *dfs_tree(tree_node *node, int *counter, int j);
+int is_leaf(tree_node *node);
 
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3

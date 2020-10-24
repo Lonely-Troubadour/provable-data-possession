@@ -44,6 +44,7 @@ int main(int argc, char **argv){
 	PDP_key *key = NULL;
 	PDP_challenge *challenge = NULL, *server_challenge = NULL;
 	PDP_proof *proof = NULL;
+	tree_node *root = NULL;
 	int opt = -1;
 	unsigned int numfileblocks = 0;
 	struct stat st;
@@ -55,7 +56,6 @@ int main(int argc, char **argv){
 	FILE *chalfile = NULL;
 	char chalpath[MAXPATHLEN];
 	char proofpath[MAXPATHLEN];
-	char tagpath[MAXPATHLEN];
 
     gettimeofday(&t0, 0);
 
@@ -65,6 +65,7 @@ int main(int argc, char **argv){
 	gettimeofday(&t1, 0);
 	elapsed = timedifference_msec(t0, t1);
 	printf("Initialize time: %f ms\n", elapsed);
+
 	while((opt = getopt_long(argc, argv, "kt:c:v:s:", longopts, NULL)) != -1){
 		switch(opt){
 			case 'k':
@@ -84,15 +85,15 @@ int main(int argc, char **argv){
                     printf("Tag time: %f ms\n" ,elapsed);
 					
 					/* Generate tree */
-					// gettimeofday(&t0, 0);
-					// generate_tree(optarg, strlen(optarg), NULL, 0);
-					// gettimeofday(&t1, 0);
-					// elapsed = timedifference_msec(t0, t1);
-					// printf("Gen tree time: %f ms\n", elapsed);
+					gettimeofday(&t0, 0);
+					generate_tree(optarg, strlen(optarg), NULL, 0);
+					gettimeofday(&t1, 0);
+					elapsed = timedifference_msec(t0, t1);
+					printf("Gen tree time: %f ms\n", elapsed);
 
 					/* Read tree */
 					// gettimeofday(&t0, 0);
-					// construct_tree(optarg, strlen(optarg), NULL, 0);
+					// node = construct_tree(optarg, strlen(optarg), NULL, 0);
 					// gettimeofday(&t1, 0);
 					// elapsed = timedifference_msec(t0, t1);
 					// printf("Read tree time: %f ms", elapsed);
@@ -149,7 +150,6 @@ int main(int argc, char **argv){
 			case 'v':
 				snprintf(chalpath, MAXPATHLEN, "%s.chal", optarg);
 				snprintf(proofpath, MAXPATHLEN, "%s.proof", optarg);
-				snprintf(tagpath, MAXPATHLEN, "%s.tag", optarg);
 				// fprintf(stdout, "%s\n", chalpath);
 				// fprintf(stdout, "%s\n", proofpath);
 
@@ -201,7 +201,7 @@ int main(int argc, char **argv){
 			   	if(!proof) fprintf(stderr, "No proof\n");
 
                 gettimeofday(&t0, 0);
-				if(pdp_verify_file(tagpath, challenge, proof))
+				if(pdp_verify_file(optarg, challenge, proof))
 					fprintf(stdout, "Verified!\n");
 				else
 					fprintf(stdout, "Cheating!\n");

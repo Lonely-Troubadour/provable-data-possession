@@ -298,6 +298,15 @@ int write_pdp_proof(FILE *prooffile, PDP_proof *proof) {
 	fwrite(proof->rho, proof->rho_size, 1, prooffile);
 	if(ferror(prooffile)) goto cleanup;
 
+#ifdef USE_M_PDP
+
+	/* Write Merkel Tree Root proof to disk */
+	fwrite(&(proof->root_size), sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	fwrite(proof->root, proof->root_size, 1, prooffile);
+	if(ferror(prooffile)) goto cleanup; 
+
+#endif
 
 	if(T) sfree(T, T_size);
 	if(rho_temp) sfree(rho_temp, rho_temp_size);
@@ -317,9 +326,9 @@ PDP_proof *read_pdp_proof(FILE *prooffile) {
 	PDP_proof *proof = NULL;
 	unsigned char *T = NULL;
 	unsigned char *rho_temp = NULL;
+	unsigned char *root = NULL;
 	size_t T_size = 0;
 	size_t rho_temp_size = 0;
-
 
 	if(!prooffile) return NULL;
 
@@ -356,6 +365,18 @@ PDP_proof *read_pdp_proof(FILE *prooffile) {
     fread(proof->rho, (unsigned int)proof->rho_size, 1, prooffile);
     if(ferror(prooffile)) goto cleanup;
 
+#ifdef USE_M_PDP
+
+	/* Read in root proof */
+	fread(&(proof->root_size), sizeof(size_t), 1, prooffile);
+	if(ferror(prooffile)) goto cleanup;
+	if ((proof->root = malloc((unsigned int)proof->root_size)) == NULL) goto cleanup;
+    memset(proof->root, 0, (unsigned int)proof->root_size);
+    fread(proof->root, (unsigned int)proof->root_size, 1, prooffile);
+    if(ferror(prooffile)) goto cleanup;
+
+#endif
+
 	if(T) sfree(T, T_size);
 	if(rho_temp) sfree(rho_temp, rho_temp_size);
 
@@ -363,6 +384,7 @@ PDP_proof *read_pdp_proof(FILE *prooffile) {
 
 cleanup:
 	if(proof->rho) sfree(proof->rho, proof->rho_size);
+	if(proof->root) sfree(proof->root, proof->root_size);
 	if(proof->T) sfree(proof->T, T_size);
 	if(proof->rho_temp) sfree(proof->rho_temp, rho_temp_size);
 	if(proof) destroy_pdp_proof(proof);

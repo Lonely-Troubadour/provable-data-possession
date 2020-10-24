@@ -442,7 +442,7 @@ int pdp_verify_proof(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP
 		/* Free memory befor next loop iteration */
 		if(index_prf && (index_prf_size > 0)) sfree(index_prf, index_prf_size);
 		if(fdh_hash) BN_clear_free(fdh_hash);
-		if(tag) destroy_pdp_tag(tag);
+		if(tag) destroy_pdp_tag(tag); tag = NULL;
 	} /* end for */
 	
 	/* Calculate tao, where tao = tao/h(W_i)^a mod N */

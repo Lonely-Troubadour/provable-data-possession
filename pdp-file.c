@@ -350,10 +350,13 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 
 	PDP_proof *proof = NULL;
 	PDP_tag *tag = NULL;
+	tree_node *root = NULL;
 	unsigned int *indices = NULL;
 	FILE *file = NULL;
 	FILE *tagfile = NULL;
+	FILE *treefile = NULL;
 	char realtagfilepath[MAXPATHLEN];
+	char realtreefilepath[MAXPATHLEN];
 	unsigned char buf[PDP_BLOCKSIZE];
 	int j = 0;
 
@@ -378,6 +381,21 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 
 	tagfile = fopen(realtagfilepath, "r");
 	if(!tagfile) goto cleanup;
+
+#ifdef USE_M_PDP
+
+	/* If no tree file path is specified, add .tree extension to the filepath */
+	if( snprintf(realtreefilepath, MAXPATHLEN, "%s.tree", filepath) >= MAXPATHLEN) goto cleanup;
+
+	/* Open tag file and tree file */
+	treefile = fopen(realtreefilepath, "r");
+	if(!treefile) goto cleanup;
+
+	/* Construct merkel hash tree */
+	root = construct_tree(filepath, filepath_len, NULL, 0);
+	if(!root) goto cleanup;
+
+#endif
 
 	/* Compute the indices i_j = pi_k1(j); the block indices to sample */
 	indices = generate_prp_pi(challenge);
@@ -407,9 +425,19 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 	proof = pdp_generate_proof_final(key, challenge, proof);
 	if(!proof) goto cleanup;
 
+#ifdef USE_M_PDP
+
+	// root = read_root(realtreefilepath);
+	if(!root) goto cleanup;
+	proof = pdp_generate_proof_root(key, challenge, proof, root);
+	if(!proof) goto cleanup;
+
+#endif
+
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
+	if(treefile) fclose(treefile);
 
 	return proof;
 
@@ -417,8 +445,11 @@ cleanup:
 	if(indices) sfree(indices, (challenge->c * sizeof(unsigned int)));
 	if(proof) destroy_pdp_proof(proof);
 	if(tag) destroy_pdp_tag(tag);
+	if(root) destroy_tree_node(root);
 	if(file) fclose(file);
 	if(tagfile) fclose(tagfile);
+	if(treefile) fclose(treefile);
+
 	return NULL;
 }
 
@@ -426,17 +457,24 @@ int pdp_verify_file(char *filepath, PDP_challenge *challenge, PDP_proof *proof){
 
 	PDP_key *key = NULL;
 	int result = 0;
+	int tree_result = 0;
+	char tagpath[MAXPATHLEN];
+	char treepath[MAXPATHLEN];
 
 	if(!challenge || !proof) return 0;
+
+	snprintf(tagpath, MAXPATHLEN, "%s.tag", filepath);
+	snprintf(treepath, MAXPATHLEN, "%s.tree", filepath);
 
 	/* Get the PDP key */
 	key = pdp_get_keypair();
 	if(!key) return 0;
-	result = pdp_verify_proof(filepath, key, challenge, proof);
+	result = pdp_verify_proof(tagpath, key, challenge, proof);
+	tree_result = check_root(treepath, key, challenge, proof);	
 
 	if(key) destroy_pdp_key(key);
 
-	return result;
+	return (result && tree_result);
 }
 
 /* pdp_challenge_and_verify_file: Creates an challenge and PDP verifies the contents of a file.  Takes in the path

@@ -100,6 +100,8 @@ int write_node(FILE *tree_file, tree_node *node) {
 	if (!tree_file || !node) return 0;
 	fwrite(node->hash, SHA_DIGEST_LENGTH, 1, tree_file);
 	if(ferror(tree_file)) goto cleanup;
+	
+	return 1;
 
 cleanup:
 	return 0;
@@ -124,8 +126,160 @@ cleanup:
 	return NULL;
 }
 
+/** Read tree root */
+tree_node * read_root(char *treefilepath) {
+	tree_node *root = NULL;
+	FILE *treefile = NULL;
+
+	treefile = fopen(treefilepath, "r");
+	if (!treefile) {
+		fprintf(stderr, "Error: Cannot open tree file.\n");
+		goto cleanup;
+	}	
+
+	if(!fseek(treefile, 0, SEEK_SET) < 0) goto cleanup;
+	if(!fseek(treefile, sizeof(unsigned short), SEEK_CUR) < 0) goto cleanup;
+
+	root = read_node(treefile);
+	if(!root) goto cleanup;
+	if(treefile) fclose(treefile);
+
+	return root;
+
+cleanup:
+	if (treefile) fclose(treefile);
+	if (root) destroy_tree_node(root);
+	fclose(treefile);
+	return NULL;
+}
+
+/* Generate root in proof: This step generates H( g_s^(root) ), the proof of 
+ * merkel hash tree root. */
+PDP_proof *pdp_generate_proof_root(PDP_key *key, PDP_challenge *challenge, PDP_proof *proof, tree_node *root) {
+	BIGNUM *bn_root = NULL;
+	BN_CTX *ctx = NULL;
+
+	if(!proof) return NULL;
+	if(!key || !challenge || !root) return NULL;
+	if(!key->rsa->n || !challenge->g_s) return NULL;
+	if( ((bn_root = BN_new()) == NULL)) goto cleanup;
+	if( ((ctx = BN_CTX_new()) == NULL)) goto cleanup;
+
+	if(!BN_bin2bn(root->hash, SHA_DIGEST_LENGTH, bn_root)) goto cleanup;
+	
+	/* Compute g_s^(root) */
+	if(!BN_mod_exp(bn_root, challenge->g_s, bn_root, key->rsa->n, ctx)) goto cleanup;
+
+	/* Compute H( g_s^(root) ) */
+	proof->root = generate_H(bn_root, &(proof->root_size));
+	if(!proof->root) goto cleanup;
+
+	if(bn_root) BN_clear_free(bn_root);
+	if(ctx) BN_CTX_free(ctx);
+	
+	return proof;
+
+cleanup:
+	if(bn_root) BN_clear_free(bn_root);
+	if(ctx) BN_CTX_free(ctx);
+	if(proof) destroy_pdp_proof(proof);
+	if(root) destroy_tree_node(root);
+
+	return NULL;
+}
+
+/* Check root in verification step. H( (g^root)^s mod N ) ?= root_proof */
+int check_root(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP_proof *proof) {
+	tree_node *root = NULL;
+	BIGNUM *bn_root = NULL;
+	BN_CTX *ctx = NULL;
+	unsigned char *H_result = NULL;
+	size_t H_result_size = 0;
+
+	/* Check */
+	if(!proof || !proof->root) goto cleanup;
+	if( (bn_root = BN_new()) == NULL ) goto cleanup;
+	if( (ctx = BN_CTX_new()) == NULL ) goto cleanup;
+
+	/* Read in root from disk */
+	root = read_root(filepath);
+	if(!root) goto cleanup;
+
+	/* Calculate H( (g^root)^s mod N )*/ 
+	BN_bin2bn(root->hash, SHA_DIGEST_LENGTH, bn_root);
+	if(!bn_root) goto cleanup;
+	BN_mod_exp(bn_root, key->g, bn_root, key->rsa->n, ctx);
+	BN_mod_exp(bn_root, bn_root, challenge->s, key->rsa->n, ctx);
+	H_result = generate_H(bn_root, &H_result_size);
+	if(!H_result) goto cleanup;
+
+	/* Compare */
+	if(memcmp(proof->root, H_result, proof->root_size)) return 0;
+
+	/* Cleanup and exit */
+	if(bn_root) BN_clear_free(bn_root);
+	if(ctx) BN_CTX_free(ctx); 
+	if(H_result && H_result_size > 0) sfree(H_result, H_result_size);
+	
+	return 1;
+
+cleanup:
+	if(root) destroy_tree_node(root);
+	if(bn_root) BN_clear_free(bn_root);
+	if(H_result && H_result_size > 0) sfree(H_result, H_result_size);
+
+	return 0;
+}
+
+/* Check if the node is leaf. Return 1 if node is leaf, otherwise 0. */
+int is_leaf(tree_node *node) {
+	if(!node->left && !node->right) return 1;
+	return 0;
+}
+
+/* Find leaf with indice j */
+tree_node *find_leaf(tree_node *root, int j) {
+	int counter = 0;
+	tree_node *node = root;
+
+	if(!root) return NULL;
+
+	node = dfs_tree(root, &counter, j);
+
+	if(!node) return NULL;
+
+	return node;
+}
+
+tree_node *dfs_tree(tree_node *node, int *counter, int j) {
+	tree_node *result = NULL;
+	if(!node) return NULL;
+
+	if(is_leaf(node)) {
+		if(*counter == j) return node;
+		(*counter)++;
+		return NULL;
+	}
+
+	if(node->left) {
+		result = dfs_tree(node->left, counter, j);
+		if(result) return result;
+	}
+
+	if(node->right) {
+		result = dfs_tree(node->right, counter, j);
+		if(result) return result;
+	}
+}
+
+/* Generates auxilary path of given indice of file block */
+PDP_proof *generate_aux_path() {
+	PDP_proof *proof;
+	return proof;
+}
+
 /** Constuct tree from reading tree file */
-int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
+tree_node* construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size_t treefilepath_len) {
 	unsigned char *realtreefilepath[MAXPATHLEN];
 	unsigned char *hash[SHA_DIGEST_LENGTH];
 	unsigned short level = 0;
@@ -146,6 +300,7 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 	file = fopen(realtreefilepath, "r");
 	if (!file) {
 		fprintf(stderr, "Cant open tree file.");
+		goto cleanup;
 	}
 
 	if (fseek(file, 0, SEEK_SET) < 0) goto cleanup;
@@ -194,12 +349,12 @@ int construct_tree(char *filepath, size_t filepath_len, char *treefilepath, size
 	// write_merkel_tree(fp, root, 0);
 	// fclose(fp);
 	fclose(file);
-	return 1;
+	return root;
 
 cleanup:
 	if (file) fclose(file);
 	if (root) destroy_tree(root);
-	return 0;
+	return NULL;
 }
 
 /** Deprecated. Write tree size */
@@ -298,7 +453,7 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 
 	printf("Start constructing tree...\n");
 	while (index != 1) {
-		printf("===Index: %d===\n", index);
+		// printf("===Index: %d===\n", index);
 		// printf("\n tmp = %p \n", tmp);
 		if (index % 2 == 1) {
 			index /= 2;
