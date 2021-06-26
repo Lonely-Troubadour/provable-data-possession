@@ -73,7 +73,7 @@
 #define RSA_E RSA_F4
 
 #define PDP_BLOCKSIZE 4096 /* 4Kbytes */
-#define TREE_BLOCKSIZE 4096 // 524288
+#define TREE_BLOCKSIZE 524288 // 4096
 /* 460 blocks gives you 99% chance of detecting an error, 300 blocks gives you 95% chance*/
 #define MAGIC_NUM_CHALLENGE_BLOCKS 460
 
@@ -254,6 +254,7 @@ int check_root(char *filepath, PDP_key *key, PDP_challenge *challenge, PDP_proof
 tree_node *find_leaf(tree_node *root, int j);
 tree_node *dfs_tree(tree_node *node, int *counter, int j);
 int is_leaf(tree_node *node);
+PDP_proof *generate_aux_path(tree_node *leaf, PDP_proof *proof);
 
 /* S3 functions in pdp-s3.c */
 #ifdef USE_S3

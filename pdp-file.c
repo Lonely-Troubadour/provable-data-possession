@@ -351,6 +351,7 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 	PDP_proof *proof = NULL;
 	PDP_tag *tag = NULL;
 	tree_node *root = NULL;
+	tree_node *node = NULL;
 	unsigned int *indices = NULL;
 	FILE *file = NULL;
 	FILE *tagfile = NULL;
@@ -431,6 +432,11 @@ PDP_proof *pdp_prove_file(char *filepath, size_t filepath_len, char *tagfilepath
 	if(!root) goto cleanup;
 	proof = pdp_generate_proof_root(key, challenge, proof, root);
 	if(!proof) goto cleanup;
+
+	node = find_leaf(root, 1);
+	proof = generate_aux_path(node, proof);
+	node = find_leaf(root, 2);
+	proof = generate_aux_path(node, proof);
 
 #endif
 

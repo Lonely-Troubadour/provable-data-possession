@@ -92,11 +92,11 @@ int main(int argc, char **argv){
 					printf("Gen tree time: %f ms\n", elapsed);
 
 					/* Read tree */
-					// gettimeofday(&t0, 0);
-					// node = construct_tree(optarg, strlen(optarg), NULL, 0);
-					// gettimeofday(&t1, 0);
-					// elapsed = timedifference_msec(t0, t1);
-					// printf("Read tree time: %f ms", elapsed);
+					gettimeofday(&t0, 0);
+					root = construct_tree(optarg, strlen(optarg), NULL, 0);
+					gettimeofday(&t1, 0);
+					elapsed = timedifference_msec(t0, t1);
+					printf("Read tree time: %f ms", elapsed);
                     break;
                 }
 				

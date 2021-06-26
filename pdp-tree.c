@@ -68,8 +68,13 @@ tree_node *create_node(tree_node* left_child, tree_node* right_child) {
     if (right_child != NULL) right = right_child->hash;
 
     if ((node = create_leaf(left, right)) == NULL) goto cleanup;
-    if (left) node->left = left_child;
-    if (right) node->right = right_child;
+
+	printf("Gen node:\n");
+	if(left) printhex(left, SHA_DIGEST_LENGTH);
+	if(right) printhex(right, SHA_DIGEST_LENGTH);
+	printhex(node->hash, SHA_DIGEST_LENGTH);
+    if (left_child) node->left = left_child;
+    if (right_child) node->right = right_child;
 
 	return node;
 
@@ -251,6 +256,7 @@ tree_node *find_leaf(tree_node *root, int j) {
 	return node;
 }
 
+/* Depth first search for leaf in tree */
 tree_node *dfs_tree(tree_node *node, int *counter, int j) {
 	tree_node *result = NULL;
 	if(!node) return NULL;
@@ -273,9 +279,74 @@ tree_node *dfs_tree(tree_node *node, int *counter, int j) {
 }
 
 /* Generates auxilary path of given indice of file block */
-PDP_proof *generate_aux_path() {
-	PDP_proof *proof;
+PDP_proof *generate_aux_path(tree_node *leaf, PDP_proof *proof) {
+	tree_node *node = NULL, *par = NULL, *res = NULL;
+	unsigned char *ptr = NULL;
+	int node_counter = 0;
+
+	/* Initialize */
+	if(!leaf) goto cleanup;
+	if(!is_leaf(leaf)) {
+		/* TODO: check tree structure */
+		printf("Not leaf\n");
+		printhex(leaf->hash, SHA_DIGEST_LENGTH);
+	}
+	node = leaf;
+	par = leaf->parent;
+
+	/* Allocate memery for aux path */
+	proof->aux_path_size += sizeof(int)+SHA_DIGEST_LENGTH;
+	if(!proof->aux_path) {
+		proof->aux_path = (unsigned char*) malloc(proof->aux_path_size);
+		if(!proof->aux_path) goto cleanup;
+		memset(proof->aux_path, 0, proof->aux_path_size);
+	} else {
+		ptr = (unsigned char*) realloc(proof->aux_path, proof->aux_path_size);
+		if(!ptr) goto cleanup;
+		proof->aux_path = ptr;
+	}
+
+	/* Copy leaf to aux path */
+	node_counter++;
+	memcpy((proof->aux_path+sizeof(int)), leaf->hash, SHA_DIGEST_LENGTH);
+	memcpy(proof->aux_path, &node_counter, sizeof(int));
+
+	/* Start finding aux path */
+	while(par != NULL) {
+		/* Realloc memery space */
+		node_counter++;
+		proof->aux_path_size += SHA_DIGEST_LENGTH;
+		ptr = realloc(proof->aux_path, proof->aux_path_size);
+		if(!ptr) goto cleanup;
+		proof->aux_path = ptr;
+
+		/* Find sublings */
+		if(node == par->left) {
+			// sibling is right
+			memcpy((proof->aux_path+proof->aux_path_size-SHA_DIGEST_LENGTH), par->right->hash, SHA_DIGEST_LENGTH);
+			printf("Right sibling\t");
+			printhex(par->right->hash, SHA_DIGEST_LENGTH);
+			res = create_node(node, par->right);
+		}else{
+			// sibling is left
+			memcpy((proof->aux_path+proof->aux_path_size-SHA_DIGEST_LENGTH), par->left->hash, SHA_DIGEST_LENGTH);
+			printf("Left sibling\t");
+			printhex(par->left->hash, SHA_DIGEST_LENGTH);
+			res = create_node(node, par->left);
+		}
+		node = par;
+		par = par->parent;
+	}
+
+	if(!memcmp(res->hash, node->hash, SHA_DIGEST_LENGTH)) printf("Success.\n");
+
 	return proof;
+
+cleanup:
+	if(proof) destroy_pdp_proof(proof);
+	if(leaf) destroy_tree_node(leaf);	
+
+	return NULL;
 }
 
 /** Constuct tree from reading tree file */
@@ -444,16 +515,21 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 		if(!BN_bin2bn(buf, TREE_BLOCKSIZE, m)) goto cleanup;
 		h_result = generate_H(m, &h_size);
 
-		// printf("File hash:\n");
+		printf("File hash:\n");
 		// printhex(h_result, SHA_DIGEST_LENGTH);
 
 		node_list[index] = create_leaf(h_result, NULL);
+		printhex(node_list[index]->hash, SHA_DIGEST_LENGTH);
 		index++;
 	}while(!feof(file));
 
 	printf("Start constructing tree...\n");
+	if(index == 1) {
+		node_list[i] = create_node(node_list[i], NULL);
+		printhex(node_list[i]->hash, SHA_DIGEST_LENGTH);	
+	}
 	while (index != 1) {
-		// printf("===Index: %d===\n", index);
+		printf("===Index: %d===\n", index);
 		// printf("\n tmp = %p \n", tmp);
 		if (index % 2 == 1) {
 			index /= 2;
@@ -462,9 +538,11 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 				right = node_list[2*i+1];
 				
 				node_list[i] = create_node(left, right);
+				printhex(node_list[i]->hash, SHA_DIGEST_LENGTH);
 			}
-			
+			left = node_list[2*i];
 			node_list[i] = create_node(left, NULL);
+			printhex(node_list[i]->hash, SHA_DIGEST_LENGTH);
 			
 			index += 1;
 		} else {
@@ -475,10 +553,11 @@ int generate_tree(char *filepath, size_t filepath_len, char *tagfilepath, size_t
 				right = node_list[2*i+1];
 
 				node_list[i] = create_node(left, right);
+				printhex(node_list[i]->hash, SHA_DIGEST_LENGTH);
 			}
 		}
-		
 	}
+	
 	printf("End...\n");
 	write_merkel_tree(tagfile, node_list[0], 0);
 
